@@ -7,16 +7,41 @@ const chapterScreen = document.querySelector('#deltarune-screen');
 const chapterList = document.querySelector('#chapter-list');
 const music = document.querySelector('#deltarune-music');
 const musicToggle = document.querySelector('#music-toggle');
+const homeMusic = document.querySelector('#home-music');
+const homeMusicToggle = document.querySelector('#home-music-toggle');
+let isMuted = false;
+let lastMoveSound = 0;
 const catalogUrl = window.GAME_LIBRARY_CATALOG || 'games.json';
 const catalogBase = () => new URL(catalogUrl, location.href);
 const assetUrl = value => new URL(value, catalogBase()).href;
 
 function sound(which) {
   const source = state.audio[which];
-  if (!source) return;
+  if (!source || isMuted) return;
+  if (which === 'move') {
+    const now = performance.now();
+    if (now - lastMoveSound < 80) return;
+    lastMoveSound = now;
+  }
   const audio = new Audio(assetUrl(source));
   audio.volume = 0.35;
   audio.play().catch(() => {});
+}
+
+function syncMuteButtons() {
+  for (const button of [musicToggle, homeMusicToggle]) {
+    button.classList.toggle('is-muted', isMuted);
+    button.setAttribute('aria-label', isMuted ? 'Unmute music' : 'Mute music');
+    button.title = isMuted ? 'Unmute music' : 'Mute music';
+  }
+  homeMusic.muted = isMuted;
+  music.muted = isMuted;
+}
+
+function startHomeMusic() {
+  if (!homeMusic.src) homeMusic.src = assetUrl(state.audio.home || 'games/deltarune/chapter1/mus/audio_drone.ogg');
+  homeMusic.volume = 0.3;
+  if (!isMuted) homeMusic.play().catch(() => {});
 }
 
 async function loadLibrary() {
@@ -59,6 +84,8 @@ function renderGames() {
 }
 
 function showDeltarune(game) {
+  homeMusic.pause();
+  document.body.classList.add('chapters-open');
   chapterList.replaceChildren();
   for (const chapter of game.chapters) {
     const row = document.createElement('button');
@@ -66,10 +93,15 @@ function showDeltarune(game) {
     row.className = 'chapter-row';
     row.disabled = Boolean(chapter.locked);
     row.innerHTML = `<img class="chapter-number" src="assets/chapter-text/chapter-${chapter.number}.png" alt="Chapter ${chapter.number}"><span class="chapter-name"><img src="assets/chapter-text/chapter-name-${chapter.number}.png" alt="${escapeHtml(chapter.name)}"></span><span class="chapter-icon" aria-hidden="true">${escapeHtml(chapter.suit || '')}</span>`;
+    row.addEventListener('pointerenter', () => sound('move'));
+    row.addEventListener('focus', () => sound('move'));
     if (!chapter.locked) {
       row.addEventListener('click', () => {
         sound('select');
-        if (chapter.url) window.location.href = assetUrl(chapter.url);
+        if (chapter.url) {
+          music.pause();
+          window.open(chapter.url, '_blank', 'noopener');
+        }
         else showNotice(`Chapter ${chapter.number} isn't included yet.`);
       });
     }
@@ -79,6 +111,7 @@ function showDeltarune(game) {
   chapterScreen.hidden = false;
   music.src = assetUrl(state.audio.deltarune || 'assets/AUDIO_ANOTHERHIM.ogg');
   music.volume = 0.35;
+  music.muted = isMuted;
   music.play().catch(() => {});
   document.querySelector('#chapter-back').focus();
 }
@@ -87,6 +120,8 @@ function leaveDeltarune() {
   music.pause();
   music.currentTime = 0;
   chapterScreen.hidden = true;
+  document.body.classList.remove('chapters-open');
+  startHomeMusic();
 }
 
 function showNotice(message) {
@@ -101,6 +136,7 @@ function escapeHtml(value = '') {
 }
 
 search.addEventListener('input', renderGames);
+themeToggle.addEventListener('pointerenter', () => sound('move'));
 themeToggle.addEventListener('click', () => {
   themeOptions.hidden = !themeOptions.hidden;
   themeToggle.setAttribute('aria-expanded', String(!themeOptions.hidden));
@@ -124,13 +160,20 @@ document.addEventListener('click', event => {
     themeToggle.setAttribute('aria-expanded', 'false');
   }
 });
-document.querySelector('#chapter-back').addEventListener('click', leaveDeltarune);
-musicToggle.addEventListener('click', () => {
-  music.muted = !music.muted;
-  musicToggle.classList.toggle('is-muted', music.muted);
-  musicToggle.setAttribute('aria-label', music.muted ? 'Unmute music' : 'Mute music');
-  musicToggle.title = music.muted ? 'Unmute music' : 'Mute music';
+document.querySelector('#chapter-back').addEventListener('click', () => {
+  sound('select');
+  leaveDeltarune();
 });
+for (const control of [musicToggle, homeMusicToggle, document.querySelector('#chapter-back')]) {
+  control.addEventListener('pointerenter', () => sound('move'));
+}
+for (const toggle of [musicToggle, homeMusicToggle]) {
+  toggle.addEventListener('click', () => {
+    isMuted = !isMuted;
+    syncMuteButtons();
+    sound('select');
+  });
+}
 document.querySelector('#close-notice').addEventListener('click', () => document.querySelector('#notice').close());
 document.querySelector('#notice').addEventListener('click', event => {
   if (event.target === event.currentTarget) event.currentTarget.close();
@@ -138,6 +181,8 @@ document.querySelector('#notice').addEventListener('click', event => {
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && !chapterScreen.hidden) leaveDeltarune();
 });
+document.addEventListener('pointerdown', startHomeMusic, { once: true });
+document.addEventListener('keydown', startHomeMusic, { once: true });
 
 try {
   const savedTheme = localStorage.getItem('dills-games-theme');

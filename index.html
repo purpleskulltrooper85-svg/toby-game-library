@@ -20,15 +20,14 @@
       <label class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search games..." autocomplete="off" aria-label="Search games"></label>
     </header>
     <section class="library" aria-label="Games"><div id="game-grid" class="game-grid"></div><p id="empty" class="empty" hidden>No games found.</p></section>
-    <footer>DETERMINATION IS EVERYTHING <span>♥</span></footer>
+    <button id="home-music-toggle" class="home-music-toggle" type="button" aria-label="Mute background music" title="Mute background music"><img src="assets/mute-placeholder.svg" alt=""></button>
   </main>
 
   <section id="deltarune-screen" class="chapter-screen" aria-labelledby="chapter-title" hidden>
     <header class="chapter-topbar"><button id="chapter-back" class="page-control" type="button">← BACK</button><h2 id="chapter-title">DELTARUNE</h2><button id="music-toggle" class="music-toggle" type="button" aria-label="Mute music" title="Mute music"><img src="assets/mute-placeholder.svg" alt=""></button></header>
     <div id="chapter-list" class="chapter-list"></div>
-    <p class="chapter-note">Select a chapter to begin your adventure.</p>
-    <p class="font-credit">Chapter typeface: undertale deltarune extended (Fixed) by Viika · <a href="https://fontstruct.com/fontstructions/show/2008226" target="_blank" rel="noreferrer">FontStruct</a>.</p>
   </section>
+  <audio id="home-music" loop preload="none"></audio>
   <audio id="deltarune-music" loop preload="none"></audio>
   <dialog id="notice" class="notice-dialog"><button class="close" id="close-notice" aria-label="Close">×</button><p id="notice-copy"></p></dialog>
   <script src="config.js"></script>
