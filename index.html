@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="undertale-deltarune">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#960d4b">
+  <meta name="theme-color" content="#000000">
   <title>Dill's Game Hub</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -11,9 +11,7 @@
   <div class="theme-menu">
     <button id="theme-toggle" class="theme-toggle" type="button" aria-haspopup="true" aria-expanded="false">THEMES</button>
     <div id="theme-options" class="theme-options" role="menu" hidden>
-      <button type="button" role="menuitemradio" aria-checked="true" data-theme="dark">DARK WORLD</button>
-      <button type="button" role="menuitemradio" aria-checked="false" data-theme="ruins">THE RUINS</button>
-      <button type="button" role="menuitemradio" aria-checked="false" data-theme="cyber">CYBER WORLD</button>
+      <button type="button" role="menuitemradio" aria-checked="true" data-theme="undertale-deltarune">UNDERTALE + DELTARUNE</button>
     </div>
   </div>
   <main class="shell">
@@ -25,11 +23,13 @@
     <footer>DETERMINATION IS EVERYTHING <span>♥</span></footer>
   </main>
 
-  <dialog id="chapters" class="chapter-dialog" aria-labelledby="chapter-title">
-    <div class="dialog-top"><div><p class="eyebrow">DELTARUNE</p><h2 id="chapter-title">Select a Chapter</h2></div><button class="close" id="close-dialog" aria-label="Close">×</button></div>
+  <section id="deltarune-screen" class="chapter-screen" aria-labelledby="chapter-title" hidden>
+    <header class="chapter-topbar"><button id="chapter-back" class="page-control" type="button">← BACK</button><h2 id="chapter-title">DELTARUNE</h2><button id="music-toggle" class="music-toggle" type="button" aria-label="Mute music" title="Mute music"><img src="assets/mute-placeholder.svg" alt=""></button></header>
     <div id="chapter-list" class="chapter-list"></div>
     <p class="chapter-note">Select a chapter to begin your adventure.</p>
-  </dialog>
+    <p class="font-credit">Chapter typeface: undertale deltarune extended (Fixed) by Viika · <a href="https://fontstruct.com/fontstructions/show/2008226" target="_blank" rel="noreferrer">FontStruct</a>.</p>
+  </section>
+  <audio id="deltarune-music" loop preload="none"></audio>
   <dialog id="notice" class="notice-dialog"><button class="close" id="close-notice" aria-label="Close">×</button><p id="notice-copy"></p></dialog>
   <script src="config.js"></script>
   <script src="app.js"></script>

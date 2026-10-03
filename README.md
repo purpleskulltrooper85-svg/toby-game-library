@@ -32,4 +32,4 @@ The supplied Deltarune Chapter 1 web build is at `games/deltarune/chapter1/`. Th
 
 ## CDN links
 
-The theme picker has three palettes: Dark World, The Ruins, and Cyber World. It remembers the selected palette in the browser. The title, search field, and theme button use Monster Friend; chapter rows use a system monospace style.
+The theme picker currently contains one theme, Undertale + Deltarune. Undertale is the first card and Deltarune is second, using the supplied heart images in `assets/`. The gallery is black; hover highlights turn yellow without scaling or shadows. The title, search field, and theme button use Monster Friend. Chapter labels are static PNG text rendered in the supplied undertale deltarune extended (Fixed) typeface; the original font file is not embedded because its license prohibits web-font use. The Deltarune chapter screen loops `assets/AUDIO_ANOTHERHIM.ogg` and includes a replaceable mute icon placeholder at `assets/mute-placeholder.svg`.

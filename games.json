@@ -1,12 +1,20 @@
 {
   "audio": {
     "move": "assets/snd_menumove.mp3",
-    "select": "assets/snd_select.mp3"
+    "select": "assets/snd_select.mp3",
+    "deltarune": "assets/AUDIO_ANOTHERHIM.ogg"
   },
   "games": [
     {
+      "title": "UNDERTALE",
+      "image": "assets/undertale-icon.png",
+      "description": "The RPG where nobody has to get hurt.",
+      "tags": "rpg monster soul",
+      "url": "games/undertale/index.html"
+    },
+    {
       "title": "DELTARUNE",
-      "image": "assets/deltarune.svg",
+      "image": "assets/deltarune-icon.png",
       "description": "A parallel story to UNDERTALE.",
       "tags": "rpg chapters toby fox",
       "chapters": [
@@ -18,13 +26,6 @@
         { "number": 6, "name": "--", "suit": "", "locked": true },
         { "number": 7, "name": "--", "suit": "", "locked": true }
       ]
-    },
-    {
-      "title": "UNDERTALE",
-      "image": "assets/undertale.svg",
-      "description": "The RPG where nobody has to get hurt.",
-      "tags": "rpg monster soul",
-      "url": "games/undertale/index.html"
     }
   ]
 }
