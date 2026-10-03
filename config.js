@@ -1,3 +1,3 @@
-// Set this to your public jsDelivr URL after publishing, for example:
-// https://cdn.jsdelivr.net/gh/USERNAME/REPOSITORY@main/games.json
+// Keep the catalog on the same GitHub Pages site so its large game files load
+// from the same origin. Small catalog-only repositories can use a jsDelivr URL.
 window.GAME_LIBRARY_CATALOG = 'games.json';
