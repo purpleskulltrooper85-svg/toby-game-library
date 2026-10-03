@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#960d4b">
+  <title>Dill's Game Hub</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="theme-menu">
+    <button id="theme-toggle" class="theme-toggle" type="button" aria-haspopup="true" aria-expanded="false">THEMES</button>
+    <div id="theme-options" class="theme-options" role="menu" hidden>
+      <button type="button" role="menuitemradio" aria-checked="true" data-theme="dark">DARK WORLD</button>
+      <button type="button" role="menuitemradio" aria-checked="false" data-theme="ruins">THE RUINS</button>
+      <button type="button" role="menuitemradio" aria-checked="false" data-theme="cyber">CYBER WORLD</button>
+    </div>
+  </div>
+  <main class="shell">
+    <header class="masthead">
+      <h1>Dill's Games</h1>
+      <label class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search games..." autocomplete="off" aria-label="Search games"></label>
+    </header>
+    <section class="library" aria-label="Games"><div id="game-grid" class="game-grid"></div><p id="empty" class="empty" hidden>No games found.</p></section>
+    <footer>DETERMINATION IS EVERYTHING <span>♥</span></footer>
+  </main>
+
+  <dialog id="chapters" class="chapter-dialog" aria-labelledby="chapter-title">
+    <div class="dialog-top"><div><p class="eyebrow">DELTARUNE</p><h2 id="chapter-title">Select a Chapter</h2></div><button class="close" id="close-dialog" aria-label="Close">×</button></div>
+    <div id="chapter-list" class="chapter-list"></div>
+    <p class="chapter-note">Select a chapter to begin your adventure.</p>
+  </dialog>
+  <dialog id="notice" class="notice-dialog"><button class="close" id="close-notice" aria-label="Close">×</button><p id="notice-copy"></p></dialog>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

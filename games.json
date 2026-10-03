@@ -1,0 +1,30 @@
+{
+  "audio": {
+    "move": "assets/snd_menumove.mp3",
+    "select": "assets/snd_select.mp3"
+  },
+  "games": [
+    {
+      "title": "DELTARUNE",
+      "image": "assets/deltarune.svg",
+      "description": "A parallel story to UNDERTALE.",
+      "tags": "rpg chapters toby fox",
+      "chapters": [
+        { "number": 1, "name": "The Beginning", "suit": "♠", "url": "games/deltarune/chapter1/index.html" },
+        { "number": 2, "name": "A Cyber's World", "suit": "♡" },
+        { "number": 3, "name": "Late Night", "suit": "♣" },
+        { "number": 4, "name": "Prophecy", "suit": "♢" },
+        { "number": 5, "name": "Festival Day", "suit": "✿" },
+        { "number": 6, "name": "--", "suit": "", "locked": true },
+        { "number": 7, "name": "--", "suit": "", "locked": true }
+      ]
+    },
+    {
+      "title": "UNDERTALE",
+      "image": "assets/undertale.svg",
+      "description": "The RPG where nobody has to get hurt.",
+      "tags": "rpg monster soul",
+      "url": "games/undertale/index.html"
+    }
+  ]
+}
