@@ -9,6 +9,10 @@ const music = document.querySelector('#deltarune-music');
 const musicToggle = document.querySelector('#music-toggle');
 const homeMusic = document.querySelector('#home-music');
 const homeMusicToggle = document.querySelector('#home-music-toggle');
+const gamePlayer = document.querySelector('#game-player');
+const gameFrame = document.querySelector('#game-frame');
+const playerTitle = document.querySelector('#player-title');
+let playerReturn = 'library';
 let isMuted = false;
 let lastMoveSound = 0;
 const catalogUrl = window.GAME_LIBRARY_CATALOG || 'games.json';
@@ -46,9 +50,14 @@ function startHomeMusic() {
 
 async function loadLibrary() {
   try {
-    const response = await fetch(catalogUrl);
-    if (!response.ok) throw new Error('Could not load games.json');
-    const config = await response.json();
+    // Inline data lets index.html work from file:// without a local web server.
+    // Keep games.json as the human-editable copy for deployments and older builds.
+    let config = window.GAME_LIBRARY_CONFIG;
+    try {
+      const response = await fetch(catalogUrl);
+      if (response.ok) config = await response.json();
+    } catch { /* file:// blocks fetch; use the embedded offline catalog */ }
+    if (!config) throw new Error('Could not load games.json');
     state.games = config.games || [];
     state.audio = config.audio || {};
     renderGames();
@@ -76,7 +85,8 @@ function renderGames() {
     card.addEventListener('click', () => {
       sound('select');
       if (game.chapters) showDeltarune(game);
-      else if (game.url) window.open(assetUrl(game.url), '_blank', 'noopener');
+      else if (game.desktopLauncher) showNotice(game.launcherMessage);
+      else if (game.url) openGame(game.url, game.title, 'library');
       else showNotice(`${game.title} is in your library. Add its playable URL to games.json to enable launch.`);
     });
     grid.append(card);
@@ -85,6 +95,8 @@ function renderGames() {
 
 function showDeltarune(game) {
   homeMusic.pause();
+  gameFrame.src = 'about:blank';
+  gamePlayer.hidden = true;
   document.body.classList.add('chapters-open');
   chapterList.replaceChildren();
   for (const chapter of game.chapters) {
@@ -98,10 +110,8 @@ function showDeltarune(game) {
     if (!chapter.locked) {
       row.addEventListener('click', () => {
         sound('select');
-        if (chapter.url) {
-          music.pause();
-          window.open(chapter.url, '_blank', 'noopener');
-        }
+        if (chapter.available && chapter.url) openGame(chapter.url, `CHAPTER ${chapter.number}`, 'chapters');
+        else if (chapter.source) showNotice(`Chapter ${chapter.number}'s files aren't bundled with this site yet. Put that folder's contents in games/deltarune/chapter${chapter.number}/ to run it here. The source folder is: ${chapter.source}`);
         else showNotice(`Chapter ${chapter.number} isn't included yet.`);
       });
     }
@@ -116,9 +126,36 @@ function showDeltarune(game) {
   document.querySelector('#chapter-back').focus();
 }
 
+function openGame(url, title, returnTo) {
+  const pageUrl = assetUrl(url);
+  playerReturn = returnTo;
+  playerTitle.textContent = title;
+  homeMusic.pause();
+  music.pause();
+  if (returnTo === 'chapters') chapterScreen.hidden = true;
+  else document.body.classList.add('chapters-open');
+  gamePlayer.hidden = false;
+  gameFrame.src = pageUrl;
+  document.querySelector('#player-back').focus();
+}
+
+function returnFromGame() {
+  gameFrame.src = 'about:blank';
+  gamePlayer.hidden = true;
+  if (playerReturn === 'chapters') {
+    chapterScreen.hidden = false;
+    music.play().catch(() => {});
+  } else {
+    document.body.classList.remove('chapters-open');
+    startHomeMusic();
+  }
+}
+
 function leaveDeltarune() {
   music.pause();
   music.currentTime = 0;
+  gameFrame.src = 'about:blank';
+  gamePlayer.hidden = true;
   chapterScreen.hidden = true;
   document.body.classList.remove('chapters-open');
   startHomeMusic();
@@ -164,7 +201,11 @@ document.querySelector('#chapter-back').addEventListener('click', () => {
   sound('select');
   leaveDeltarune();
 });
-for (const control of [musicToggle, homeMusicToggle, document.querySelector('#chapter-back')]) {
+document.querySelector('#player-back').addEventListener('click', () => {
+  sound('select');
+  returnFromGame();
+});
+for (const control of [musicToggle, homeMusicToggle, document.querySelector('#chapter-back'), document.querySelector('#player-back')]) {
   control.addEventListener('pointerenter', () => sound('move'));
 }
 for (const toggle of [musicToggle, homeMusicToggle]) {
@@ -179,7 +220,9 @@ document.querySelector('#notice').addEventListener('click', event => {
   if (event.target === event.currentTarget) event.currentTarget.close();
 });
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && !chapterScreen.hidden) leaveDeltarune();
+  if (event.key !== 'Escape') return;
+  if (!gamePlayer.hidden) returnFromGame();
+  else if (!chapterScreen.hidden) leaveDeltarune();
 });
 document.addEventListener('pointerdown', startHomeMusic, { once: true });
 document.addEventListener('keydown', startHomeMusic, { once: true });

@@ -27,6 +27,10 @@
     <header class="chapter-topbar"><button id="chapter-back" class="page-control" type="button">← BACK</button><h2 id="chapter-title">DELTARUNE</h2><button id="music-toggle" class="music-toggle" type="button" aria-label="Mute music" title="Mute music"><img src="assets/mute-placeholder.svg" alt=""></button></header>
     <div id="chapter-list" class="chapter-list"></div>
   </section>
+  <section id="game-player" class="game-player" aria-label="Game player" hidden>
+    <header class="player-topbar"><button id="player-back" class="page-control" type="button">← BACK</button><h2 id="player-title">GAME</h2></header>
+    <iframe id="game-frame" title="Game" allow="autoplay; fullscreen; gamepad" referrerpolicy="no-referrer"></iframe>
+  </section>
   <audio id="home-music" loop preload="none"></audio>
   <audio id="deltarune-music" loop preload="none"></audio>
   <dialog id="notice" class="notice-dialog"><button class="close" id="close-notice" aria-label="Close">×</button><p id="notice-copy"></p></dialog>

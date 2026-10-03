@@ -1,16 +1,12 @@
 # Dill's Game Hub
 
-A static, themeable game gallery. The Undertale + Deltarune theme uses a JSON catalog so games, covers, audio, and launch links can be changed without rewriting the page.
+A static game gallery. `index.html` is the entry page: selecting a bundled game opens it in the full-screen player inside this same page. The game itself still needs its files in the matching `games/` folder; an HTML page cannot contain the separate game data unless it is repackaged as one enormous file.
 
-## Run it
+## Add a game
 
-Open `index.html` through a static web server (for example GitHub Pages). Browsers usually block `fetch("games.json")` when the page is opened directly as a `file://` URL.
+Add a game entry to `games.json` with a title, image path, and playable page path. Chapter entries use the same `games/deltarune/chapterN/` layout. The hosted site reads `games.json`; `config.js` supplies a small offline fallback catalog when the page is opened directly. Keep the fallback in sync if you change the catalog and need offline-file use.
 
-## Add or change a game
-
-Edit `games.json` and add an item to `games`. `image` can point to a file in this repository or a public image URL. Set `url` to a playable page. For a chapter chooser, use a `chapters` array; chapters without a `url` stay disabled. Each chapter's `url` opens its matching page in Camzzz-vrgt/Toby-Web through a GitHub raw-content proxy; its `source` field links to the original folder on GitHub.
-
-Example game:
+Example:
 
 ```json
 {
@@ -18,26 +14,26 @@ Example game:
   "image": "assets/my-game.webp",
   "description": "A short description",
   "tags": "adventure puzzle",
-  "url": "https://example.com/play"
+  "url": "games/my-game/index.html"
 }
 ```
 
-The provided DR Simulator folder is the source for a Tauri desktop launcher; it is not a browser-ready game build. The DR&UT Battles card opens the simulator's official browser game at deltarunesim.com.
+## Bundled games and missing chapters
 
-## Included games and sounds
+Undertale and Deltarune Chapter 1 are included in `games/`. Chapter 2–5 selector rows are present, but their game files are not in this repository yet. The `drsim-launcher-1.1.0` folder supplied for DR&UT Battles is a Tauri desktop launcher, not a browser game build, so it cannot run inside this page.
 
-The supplied Deltarune Chapter 1 and Undertale browser builds are in `games/`. The gallery loops the supplied `audio_drone.ogg` after the first click or key press; the Deltarune chapter menu loops `AUDIO_ANOTHERHIM.ogg`. Either music toggle mutes both tracks. Sound effects play on hover/focus and selection.
-
-The chapter selector labels are raster images made with the supplied Undertale Deltarune Extended (Fixed) typeface. Its license prohibits embedding it as a web font and requires attribution when its rendered output is displayed publicly. The UI omits the credit line; attribution is kept here: [Viika's FontStruct typeface](https://fontstruct.com/fontstructions/show/2008226).
-
-## Download only the Undertale folder
-
-GitHub's **Download ZIP** button downloads the repository snapshot. To check out only `files/undertale` and avoid fetching the other file contents, use Git's sparse checkout in PowerShell:
+To fetch just selected folders from `Camzzz-vrgt/Toby-Web` without cloning all file contents, install Git and run this in PowerShell:
 
 ```powershell
 git clone --depth 1 --filter=blob:none --sparse https://github.com/Camzzz-vrgt/Toby-Web.git
 cd Toby-Web
-git sparse-checkout set files/undertale
+git sparse-checkout set files/chapter2 files/chapter3 files/chapter4 files/chapter5
 ```
 
-This fetches the repository's small Git metadata first and then the selected folder's files. Git must be installed.
+Then copy each selected `files/chapterN` folder's contents into this project's `games/deltarune/chapterN/` folder, and change that chapter's `available` to `true` in `games.json` and `config.js`. To fetch only Undertale, use `git sparse-checkout set files/undertale` instead.
+
+The four selected chapter folders total about 1.55 GB, so adding all of them to this GitHub Pages site is not a practical deployment. Fetch only the chapter(s) you need. `git sparse-checkout set` replaces the selected folder list; include all desired paths in that one command.
+
+## Audio and font
+
+The supplied `audio_drone.ogg` loops on the home screen after the first interaction; `AUDIO_ANOTHERHIM.ogg` loops on the Deltarune chapter selector. Hover and selection sounds are included. The chapter row lettering is rendered into small PNG images from the supplied Undertale Deltarune Extended (Fixed) typeface because its license does not allow webfont embedding. Credit: [Viika's FontStruct typeface](https://fontstruct.com/fontstructions/show/2008226).
