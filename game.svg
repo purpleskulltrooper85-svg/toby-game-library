@@ -2,7 +2,33 @@
   <title>Dill's Games</title>
   <foreignObject x="0" y="0" width="100%" height="100%">
     <xhtml:div style="width:100%;height:100%;margin:0;overflow:hidden">
-      <xhtml:iframe src="github-cdn.html" title="Dill's Games" allow="autoplay; fullscreen; gamepad" style="display:block;width:100%;height:100%;border:0;background:#000"></xhtml:iframe>
+      <xhtml:iframe id="hub-frame" title="Dill's Games" allow="autoplay; fullscreen; gamepad" style="display:block;width:100%;height:100%;border:0;background:#000"></xhtml:iframe>
     </xhtml:div>
   </foreignObject>
+  <script><![CDATA[
+    (() => {
+      const frame = document.getElementById("hub-frame");
+      const launcherUrl = new URL("github-cdn.html", document.URL).href;
+      const baseUrl = new URL(".", launcherUrl).href;
+
+      fetch(launcherUrl, { cache: "no-store" })
+        .then(response => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.text();
+        })
+        .then(html => {
+          const baseTag = `<base href="${baseUrl}">`;
+          if (/<head\b[^>]*>/i.test(html)) {
+            html = html.replace(/<head\b[^>]*>/i, head => `${head}${baseTag}`);
+          } else {
+            html = `<head>${baseTag}</head>${html}`;
+          }
+          frame.srcdoc = html;
+        })
+        .catch(error => {
+          console.error("Could not load Dill's Games:", error);
+          frame.srcdoc = '<!doctype html><meta charset="utf-8"><body style="margin:0;padding:24px;background:#000;color:#fff;font:16px monospace">Could not load Dill\'s Games. Try refreshing.</body>';
+        });
+    })();
+  ]]></script>
 </svg>
