@@ -54,7 +54,7 @@ async function loadLibrary() {
     // Keep games.json as the human-editable copy for deployments and older builds.
     let config = window.GAME_LIBRARY_CONFIG;
     try {
-      const response = await fetch(catalogUrl);
+      const response = await fetch(catalogUrl, { cache: 'no-store' });
       if (response.ok) config = await response.json();
     } catch { /* file:// blocks fetch; use the embedded offline catalog */ }
     if (!config) throw new Error('Could not load games.json');
