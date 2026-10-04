@@ -8,14 +8,14 @@ window.GAME_LIBRARY_CONFIG = {
     "deltarune": "assets/AUDIO_ANOTHERHIM.ogg"
   },
   "games": [
-    { "title": "UNDERTALE", "image": "assets/undertale-icon.png", "labelImage": "assets/chapter-text/game-undertale.png", "description": "The RPG where nobody has to get hurt.", "tags": "rpg monster soul", "url": "games/undertale/index.html?v=2" },
+    { "title": "UNDERTALE", "image": "assets/undertale-icon.png", "labelImage": "assets/chapter-text/game-undertale.png", "description": "The RPG where nobody has to get hurt.", "tags": "rpg monster soul", "url": "games/undertale/index.html?v=3" },
     {
       "title": "DELTARUNE", "image": "assets/deltarune-icon.png", "labelImage": "assets/chapter-text/game-deltarune.png", "description": "A parallel story to UNDERTALE.", "tags": "rpg chapters toby fox",
       "chapters": [
         { "number": 1, "name": "The Beginning", "icon": "assets/Deltarune Icons/Chapter 1.png", "url": "games/deltarune/chapter1/index.html", "available": true },
-        { "number": 2, "name": "A Cyber's World", "icon": "assets/Deltarune Icons/Chapter 2.png", "url": "games/deltarune/chapter2/index.html", "available": true },
-        { "number": 3, "name": "Late Night", "icon": "assets/Deltarune Icons/Chapter 3.png", "url": "games/deltarune/chapter3/index.html", "available": true },
-        { "number": 4, "name": "Prophecy", "icon": "assets/Deltarune Icons/Chapter 4.png", "url": "games/deltarune/chapter4/index.html", "available": true },
+        { "number": 2, "name": "A Cyber's World", "icon": "assets/Deltarune Icons/Chapter 2.png", "url": "games/deltarune/chapter2/index.html?v=2", "available": true },
+        { "number": 3, "name": "Late Night", "icon": "assets/Deltarune Icons/Chapter 3.png", "url": "games/deltarune/chapter3/index.html?v=2", "available": true },
+        { "number": 4, "name": "Prophecy", "icon": "assets/Deltarune Icons/Chapter 4.png", "url": "games/deltarune/chapter4/index.html?v=2", "available": true },
         { "number": 5, "name": "Festival Day", "icon": "assets/Deltarune Icons/Chapter 5.png", "url": "games/deltarune/chapter5/index.html", "available": true },
         { "number": 6, "name": "--", "suit": "", "locked": true },
         { "number": 7, "name": "--", "suit": "", "locked": true }

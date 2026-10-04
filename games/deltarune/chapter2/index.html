@@ -435,7 +435,7 @@
           return originalOpen.call(this, method, url, ...rest);
       };
       let index = document.createElement("script");
-      index.src = "index.js";
+      index.src = "index.js?v=2";
       document.body.appendChild(index);
 
       let runner = document.createElement("script");

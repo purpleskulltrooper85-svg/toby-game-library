@@ -694,6 +694,7 @@ function onGameSetWindowSize(width,height)
     startingHeight = height;
     startingWidth = width;
     startingAspect = startingWidth / startingHeight;
+    ensureAspectRatio();
 }
 
 function triggerAd(adId, _callback_beforeAd, _callback_afterAd, _callback_adDismissed, _callback_adViewed, _callback_adbreakDone) {

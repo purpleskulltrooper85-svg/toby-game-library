@@ -851,6 +851,7 @@
               startingHeight = height;
               startingWidth = width;
               startingAspect = startingWidth / startingHeight;
+                ensureAspectRatio();
           }
       }
 

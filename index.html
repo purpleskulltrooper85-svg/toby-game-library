@@ -30,11 +30,19 @@
   <section id="game-player" class="game-player" aria-label="Game player" hidden>
     <header class="player-topbar"><button id="player-back" class="page-control" type="button">← BACK</button><h2 id="player-title">GAME</h2></header>
     <iframe id="game-frame" title="Game" allow="autoplay; fullscreen; gamepad" referrerpolicy="no-referrer"></iframe>
+    <div id="game-loading" class="game-loading" role="status" aria-live="polite" hidden>
+      <div class="game-loading-panel">
+        <span class="game-loading-spinner" aria-hidden="true"></span>
+        <strong id="game-loading-title">Loading game...</strong>
+        <span id="game-loading-message">Downloading game files. First load can take a while.</span>
+        <progress id="game-loading-progress" max="100" value="0" hidden></progress>
+      </div>
+    </div>
   </section>
   <audio id="home-music" loop preload="none"></audio>
   <audio id="deltarune-music" loop preload="none"></audio>
   <dialog id="notice" class="notice-dialog"><button class="close" id="close-notice" aria-label="Close">×</button><p id="notice-copy"></p></dialog>
-  <script src="config.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <script src="config.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

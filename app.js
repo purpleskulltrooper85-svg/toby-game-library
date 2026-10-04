@@ -12,8 +12,13 @@ const homeMusicToggle = document.querySelector('#home-music-toggle');
 const gamePlayer = document.querySelector('#game-player');
 const gameFrame = document.querySelector('#game-frame');
 const playerTitle = document.querySelector('#player-title');
+const gameLoading = document.querySelector('#game-loading');
+const gameLoadingTitle = document.querySelector('#game-loading-title');
+const gameLoadingMessage = document.querySelector('#game-loading-message');
+const gameLoadingProgress = document.querySelector('#game-loading-progress');
 let playerReturn = 'library';
 let gameLoadToken = 0;
+let gameLoadingTimer = 0;
 let isMusicMuted = false;
 let lastMoveSound = 0;
 const catalogUrl = window.GAME_LIBRARY_CATALOG || 'games.json';
@@ -100,6 +105,8 @@ function renderGames() {
 function showDeltarune(game) {
   homeMusic.pause();
   gameLoadToken++;
+  stopGameLoading();
+  gameLoading.hidden = true;
   gameFrame.removeAttribute('srcdoc');
   gameFrame.src = 'about:blank';
   gamePlayer.hidden = true;
@@ -145,14 +152,68 @@ function openGame(url, title, returnTo) {
   if (returnTo === 'chapters') chapterScreen.hidden = true;
   else document.body.classList.add('chapters-open');
   gamePlayer.hidden = false;
+  startGameLoading(title);
   gameFrame.removeAttribute('srcdoc');
   if (window.GAME_LIBRARY_CDN_MODE) {
     gameFrame.src = 'about:blank';
     loadCdnGame(pageUrl, loadToken);
   } else {
     gameFrame.src = pageUrl;
+    watchGameStartup(loadToken, title, pageUrl);
   }
   document.querySelector('#player-back').focus();
+}
+
+function startGameLoading(title) {
+  stopGameLoading();
+  gameLoadingTitle.textContent = `Loading ${title}...`;
+  gameLoadingMessage.textContent = 'Downloading game files. First load can take a while.';
+  gameLoadingProgress.hidden = true;
+  gameLoadingProgress.value = 0;
+  gameLoading.hidden = false;
+}
+
+function stopGameLoading() {
+  if (gameLoadingTimer) clearInterval(gameLoadingTimer);
+  gameLoadingTimer = 0;
+}
+
+function watchGameStartup(loadToken, title, expectedUrl = '') {
+  stopGameLoading();
+  gameLoadingTimer = setInterval(() => {
+    if (loadToken !== gameLoadToken || gamePlayer.hidden) {
+      stopGameLoading();
+      return;
+    }
+
+    let gameDocument;
+    try { gameDocument = gameFrame.contentDocument; } catch { return; }
+    if (!gameDocument?.body || gameDocument.URL === 'about:blank') return;
+    if (expectedUrl && gameDocument.URL !== expectedUrl) return;
+
+    const status = gameDocument.querySelector('#status')?.textContent.trim();
+    const sourceProgress = gameDocument.querySelector('#progress');
+    const sourceSpinner = gameDocument.querySelector('#spinner');
+    gameLoadingMessage.textContent = status || 'Starting the game engine...';
+    if (sourceProgress && Number(sourceProgress.max) > 0 && !sourceProgress.hidden) {
+      gameLoadingProgress.max = 100;
+      gameLoadingProgress.value = Math.max(0, Math.min(100, Number(sourceProgress.value) / Number(sourceProgress.max) * 100));
+      gameLoadingProgress.hidden = false;
+    }
+
+    const canvas = gameDocument.querySelector('canvas');
+    if (canvas) {
+      const style = getComputedStyle(canvas);
+      const bounds = canvas.getBoundingClientRect();
+      if (canvas.classList.contains('active') && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0.8 && bounds.width > 0 && bounds.height > 0) {
+        stopGameLoading();
+        gameLoading.hidden = true;
+      }
+    } else if (gameDocument.readyState === 'complete' && (!gameDocument.querySelector('#status') || (!status && sourceProgress?.hidden && sourceSpinner && getComputedStyle(sourceSpinner).display === 'none'))) {
+      stopGameLoading();
+      gameLoading.hidden = true;
+    }
+  }, 400);
 }
 
 function prepareCdnGameHtml(html, pageUrl) {
@@ -183,14 +244,19 @@ async function loadCdnGame(pageUrl, loadToken) {
     const html = await response.text();
     if (loadToken !== gameLoadToken || gamePlayer.hidden) return;
     gameFrame.srcdoc = prepareCdnGameHtml(html, pageUrl);
+    watchGameStartup(loadToken, playerTitle.textContent);
   } catch (error) {
     if (loadToken !== gameLoadToken || gamePlayer.hidden) return;
+    stopGameLoading();
+    gameLoading.hidden = true;
     gameFrame.srcdoc = `<!doctype html><meta charset="utf-8"><body style="margin:0;padding:24px;background:#000;color:#fff;font:16px monospace"><h2>Game could not load</h2><p>${escapeHtml(error.message || error)}</p></body>`;
   }
 }
 
 function returnFromGame() {
   gameLoadToken++;
+  stopGameLoading();
+  gameLoading.hidden = true;
   gameFrame.removeAttribute('srcdoc');
   gameFrame.src = 'about:blank';
   gamePlayer.hidden = true;
@@ -207,9 +273,10 @@ function leaveDeltarune() {
   music.pause();
   music.currentTime = 0;
   gameLoadToken++;
+  stopGameLoading();
+  gameLoading.hidden = true;
   gameFrame.removeAttribute('srcdoc');
   gameFrame.src = 'about:blank';
-  gamePlayer.hidden = true;
   chapterScreen.hidden = true;
   document.body.classList.remove('chapters-open');
   startHomeMusic();
