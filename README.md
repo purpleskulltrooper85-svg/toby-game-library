@@ -1,4 +1,4 @@
-# Dill's Game Hub
+# Dill's Games
 
 A static game gallery. `index.html` is the entry page: selecting a bundled game opens it in the full-screen player inside this same page. The game itself still needs its files in the matching `games/` folder; an HTML page cannot contain the separate game data unless it is repackaged as one enormous file.
 
@@ -18,9 +18,17 @@ Example:
 }
 ```
 
-## Bundled games and missing chapters
+## GitHub CDN launcher
 
-Undertale and Deltarune Chapter 1 are bundled in `games/`. Chapters 2–5 run in the same full-screen player from jsDelivr URLs pointing at the corresponding `Toby-Web` folders. Their files total about 1.54 GB, so they are served from the CDN instead of being copied into this Pages site; GitHub Pages caps a published site at 1 GB. DR&UT Battles has been removed from the game list for now.
+`github-cdn.html` is a single-page launcher shell. It loads the stylesheet, app, catalog, and game files from this public repository through jsDelivr. It fetches each game's HTML and renders it with the correct CDN base URL because jsDelivr serves game HTML as plain text. After pushing the repository changes to `main`, open it at `https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/github-cdn.html`. This is one launcher document, not one HTML containing the entire roughly 2 GB library. FNF Freeplay uses the supplied launcher's existing UGS CDN for its individual mods.
+
+`game.svg` is a full-window SVG wrapper around `github-cdn.html`. After pushing to `main`, it can be opened at `https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/game.svg`.
+
+## Bundled games
+
+UNDERTALE, DELTARUNE Chapters 1–5, Classic Knight, Crownfall, and the FNF Freeplay launcher are listed in the hub. Deltarune chapters include their split game data and music under `games/deltarune/chapterN/`. Classic Knight's page and 1,227 required image/audio assets are under `games/classic-knight/`. Crownfall is a standalone HTML page with its game assets embedded in it. The FNF launcher is under `games/fnf/`.
+
+The full library is about 2 GB, exceeding GitHub Pages' 1 GB published-site limit; use hosting with enough storage if deploying all game files together. GitHub CDN hosting also requires pushing these local changes to the linked repository first.
 
 If you already have the `Toby-Web` sparse checkout at `C:\Users\purpl\Toby-Web`, run this from PowerShell:
 
@@ -28,19 +36,18 @@ If you already have the `Toby-Web` sparse checkout at `C:\Users\purpl\Toby-Web`,
 & 'C:\Users\purpl\OneDrive\Documents\New project\toby-game-library\download-missing-assets.ps1'
 ```
 
-It adds only `files/chapter1/mus` and `files/undertale` to that checkout, then copies them into the matching `games/` folders here. It merges files without deleting existing ones.
+It adds `files/chapter1` through `files/chapter5`, `files/undertale`, `files/vendor`, and the shared `files/mobile-controls.js` to that checkout, then merges them into the matching `games/` folders here. It preserves the existing Chapter 1 and Undertale launchers and does not delete existing files.
 
 For offline/local copies, you can fetch just selected folders from `Camzzz-vrgt/Toby-Web` without cloning all file contents. Install Git and run this in PowerShell:
 
 ```powershell
 git clone --depth 1 --filter=blob:none --sparse https://github.com/Camzzz-vrgt/Toby-Web.git
 cd Toby-Web
-git sparse-checkout set files/chapter2 files/chapter3 files/chapter4 files/chapter5
+git sparse-checkout set files/chapter1 files/chapter2 files/chapter3 files/chapter4 files/chapter5 files/undertale files/vendor
+git sparse-checkout add --skip-checks files/mobile-controls.js
 ```
 
-The online selector already points Chapters 2–5 at the CDN, so these downloads are only needed if you want a local copy. Copy a selected `files/chapterN` folder into `games/deltarune/chapterN/` and change its catalog URL to that local `index.html` path. The missing-assets script separately fetches and copies Chapter 1 music and Undertale. To fetch only Undertale, use `git sparse-checkout set files/undertale` instead.
-
-The four selected chapter folders total about 1.55 GB, so adding all of them to this GitHub Pages site is not a practical deployment. Fetch only the chapter(s) you need. `git sparse-checkout set` replaces the selected folder list; include all desired paths in that one command.
+Run the sync script after the checkout has the selected folders. `git sparse-checkout set` replaces the selected folder list; include all desired paths in that one command.
 
 ## Audio and font
 

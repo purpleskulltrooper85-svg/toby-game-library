@@ -364,6 +364,17 @@
       <div id="messages">
       </div>
     </div>
+    <script id="tick-worker" type="javascript/worker">
+      let tickInterval = null;
+      self.onmessage = function ({ data }) {
+        if (data.run && tickInterval === null) {
+          tickInterval = setInterval(() => self.postMessage({}), 1000 / (data.fps || 60));
+        } else if (!data.run) {
+          clearInterval(tickInterval);
+          tickInterval = null;
+        }
+      };
+    </script>
     <script>
       const blob = new Blob([document.querySelector('#tick-worker').textContent]);
 const worker = new Worker(window.URL.createObjectURL(blob));

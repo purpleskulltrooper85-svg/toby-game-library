@@ -1,0 +1,1995 @@
+/* ============================================================
+   TRASH CLASH ROYALE — complete arena battler
+   ============================================================ */
+'use strict';
+
+/* ---------------- constants ---------------- */
+const W = 400, H = 600;             // game coordinates
+const CH = 700;                     // canvas pixel height (extra margin top/bottom)
+const CW = 440;                     // canvas pixel width — a bit wider than the world for desktop
+const VS = CH / H;                  // vertical scale for background fill
+const VXOFF = -(W * VS - CW) / 2;   // horizontal offset from uniform scale
+const RIVER_Y = 260, RIVER_HALF = 14;
+const BRIDGE_L = 95, BRIDGE_R = 305, BRIDGE_HALF = 18;
+const TILE = W / 18;                // CR-style 18-tile-wide grid
+const FIELD = { x0: 30, x1: 370, y0: 72, y1: 440 };  // playable placement area
+const MATCH_TIME = 180, OVERTIME = 60;
+const ELIXIR_RATE = 1 / 2.8, ELIXIR_MAX = 10;
+const IMGDIR = 'assets/img/';
+const KNIGHT_FACES = ['down','downright','right','upright','up','upleft','left','downleft'];
+const USE_NEW_KNIGHT = !location.pathname.toLowerCase().endsWith('/classic-knight.html') && new URLSearchParams(location.search).get('knight') !== 'old';
+
+/* ---------------- card definitions ---------------- */
+const CARDS = {
+  knight:      { key:'knight',      label:'Knight',       cost:3, count:1, hp:1766, dmg:202,  hitSpeed:1.2, range:18, speed:38, radius:9,  sprite:'Knight',      targets:'ground' },
+  archers:     { key:'archers',     label:'Archers',      cost:3, count:2, hp:304,  dmg:112,  hitSpeed:0.9, range:49, speed:38, radius:7, sprite:'Archer',     targets:'any', projectile:'arrow', scale:1.12 },
+  skeletons:   { key:'skeletons',   label:'Skeletons',    cost:1, count:3, hp:81,   dmg:81,   hitSpeed:1.1, range:14, speed:49, radius:6,  sprite:'Skeleton',    targets:'ground' },
+  giant:       { key:'giant',       label:'Giant',        cost:5, count:1, hp:4090, dmg:253,  hitSpeed:1.5, range:20, speed:20, radius:12, sprite:'Giant',       targets:'ground', buildingsOnly:true },
+  minipekka:   { key:'minipekka',   label:'Mini P.E.K.K.A', cost:4, count:1, hp:1200, dmg:715, hitSpeed:1.6, range:16, speed:37, radius:9, sprite:'PekkaMini', targets:'ground', scale:1.4, noShadow:true },
+  babydragon:  { key:'babydragon',  label:'Baby Dragon',  cost:4, count:1, hp:1152, dmg:161,  hitSpeed:1.5, range:42, speed:34, radius:10, sprite:'DragonBaby',  targets:'any', flying:true, splash:38, projectile:'fireball' },
+  speargoblins:{ key:'speargoblins',label:'Spear Goblins',cost:2, count:3, hp:133,  dmg:81,   hitSpeed:1.7, range:49, speed:46, radius:6, sprite:'GoblinSpear', targets:'any', projectile:'spear' },
+  golem:       { key:'golem',       label:'Golem',        cost:8, count:1, hp:5120, dmg:312,  hitSpeed:2.5, range:20, speed:22, radius:14, sprite:'Golem',       targets:'ground', buildingsOnly:true, deathSpawn:{ sprite:'Golemite', hp:1039, dmg:84, hitSpeed:2.5, range:16, speed:38, radius:10, targets:'ground', buildingsOnly:true }, deathCount:2 },
+  cannon:      { key:'cannon',      label:'Cannon',       cost:3, count:1, hp:824,  dmg:212,  hitSpeed:0.9, range:122, speed:0, radius:11, building:true, sprite:'Cannon', targets:'ground', lifetime:30, projectile:'canonball' },
+  fireball:    { key:'fireball',    label:'Fireball',     cost:4, spell:true, dmg:688, radius:42, towerFactor:0.4 },
+  poison:      { key:'poison',      label:'Poison',       cost:4, spell:true, dps:92, duration:8, radius:45, towerFactor:0.4 },
+  arrows:      { key:'arrows',      label:'Arrows',       cost:3, spell:true, dmg:250, radius:45, towerFactor:0.35 },
+  skeletonarmy:{ key:'skeletonarmy',label:'Skeleton Army',cost:3, count:16, hp:81, dmg:81, hitSpeed:1.1, range:14, speed:49, radius:6, sprite:'Skeleton', targets:'ground', unlockTrophies:0 },
+};
+
+/* Arenas: trophy thresholds unlock each arena's look; higher arenas unlock cards */
+const ARENAS = [
+  { name:'Training Camp',      min:0,   img:'Arena1.png' },
+  { name:'Bone Pit',           min:100, img:'Arena2.png' },
+  { name:'Barbarian Bowl',     min:200, img:'Arena3.png' },
+  { name:"Builder's Workshop", min:300, img:'Arena4.png' },
+];
+function arenaIndex(){ let i = 0; ARENAS.forEach((a,j) => { if (G.trophies >= a.min) i = j; }); return i; }
+const ALL_CARD_KEYS = ['knight','archers','skeletons','giant','minipekka','babydragon','speargoblins','golem','cannon','fireball','poison','arrows','skeletonarmy'];
+const DEFAULT_DECK = ['knight','archers','skeletons','giant','minipekka','babydragon','speargoblins','fireball'];
+
+/* ---------------- sound ---------------- */
+const SFX = (() => {
+  const sfxCache = {};
+  function play(name, vol){                      // per-card troop/spell sounds from assets/sfx
+    if (!name) return;
+    try {
+      const a = sfxCache[name] || (sfxCache[name] = new Audio(`assets/sfx/${name}.wav`));
+      const inst = a.cloneNode();
+      inst.volume = vol || 0.7;
+      inst.play().catch(()=>{});
+    } catch(err){}
+  }
+  return {
+    play,
+    card(cardKey){ play('deploy_' + cardKey, 0.75); },
+    hit(cardKey){ play('atk_' + cardKey, 0.55); },
+    deploy(){}, spell(){}, win(){}, lose(){}, beep(){},
+    towerDown(){
+      const a = SFX.towerAudio || (SFX.towerAudio = new Audio('assets/sound/tower-down.wav'));
+      const inst = a.cloneNode();
+      inst.volume = 0.8;
+      inst.play().catch(()=>{});
+    },
+    click(){
+      const a = SFX.clickAudio || (SFX.clickAudio = new Audio('assets/sound/click.mp3'));
+      const inst = a.cloneNode();
+      inst.volume = 0.55;
+      inst.play().catch(()=>{});
+    },
+    music(){
+      const a = SFX.musicAudio || (SFX.musicAudio = new Audio('assets/sound/menu.mp3'));
+      a.loop = true;
+      a.volume = 0.5;
+      if (!a.paused) return;
+      a.play().catch(() => { SFX.musicPending = true; });
+    },
+    stopMusic(){
+      if (SFX.musicAudio){ SFX.musicAudio.pause(); SFX.musicPending = false; }
+    },
+    battle(){
+      SFX.stopMusic();
+      if (SFX.battle2Audio) SFX.battle2Audio.pause();
+      SFX.battle2Playing = false;
+      const a = SFX.battle1Audio || (SFX.battle1Audio = new Audio('assets/sound/battle1.mp3'));
+      a.loop = false;
+      a.volume = 0.5;
+      a.currentTime = 0;
+      a.onended = () => {
+        if (SFX.battle1Plays === undefined || SFX.battle1Plays < 2){
+          SFX.battle1Plays = (SFX.battle1Plays || 0) + 1;
+          if (SFX.battle1Plays < 2){ a.currentTime = 0; a.play().catch(()=>{}); return; }
+        }
+        // played 2x -> switch to the secondary loop forever
+        const b = SFX.battle2Audio || (SFX.battle2Audio = new Audio('assets/sound/battle2.mp3'));
+        b.loop = true;
+        b.volume = 0.5;
+        SFX.battle2Playing = true;
+        b.play().catch(()=>{});
+      };
+      SFX.battle1Plays = 0;
+      a.play().catch(()=>{});
+    },
+    stopBattle(){
+      if (SFX.battle1Audio) SFX.battle1Audio.pause();
+      if (SFX.battle2Audio) SFX.battle2Audio.pause();
+      SFX.battle2Playing = false;
+      SFX.battle1Plays = 0;
+    },
+    retryMusic(){
+      if (!SFX.musicPending) return;
+      SFX.musicPending = false;
+      SFX.music();
+    },
+    startup(){
+      const a = SFX.startupAudio || (SFX.startupAudio = new Audio('assets/sound/startup.mp3'));
+      a.volume = 0.8;
+      a.currentTime = 0;
+      a.play().then(() => { SFX.startupPlayed = true; }).catch(() => { SFX.startupPending = true; });
+    },
+    retryStartup(){
+      if (!SFX.startupPending) return;
+      SFX.startupPending = false;
+      SFX.startup();
+    },
+  };
+})();
+
+/* ---------------- asset loading ---------------- */
+const IMG = {};   // key -> HTMLImageElement
+const FRAMES = {}; // troop sprite -> { move:[], attack:[] }
+let loadTotal = 1, loadDone = 0;
+
+function tryLoad(src){
+  return new Promise(resolve => {
+    const i = new Image();
+    let settled = false;
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (value) loadDone++;
+      resolve(value);
+    };
+    const timeout = setTimeout(() => finish(null), 30000);
+    i.onload = () => finish(i);
+    i.onerror = () => finish(null);
+    i.src = src;
+  });
+}
+function loadImg(key, src){
+  return tryLoad(src).then(i => { if (i) IMG[key] = i; });
+}
+// raw export blocks that are mirrored copies — flipped in code so files stay untouched
+const FLIP_DIRS = {
+  PekkaMini: {
+    move:   ['upleft','upleft_red'],
+    mirror: { downleft: 'downright', downleft_red: 'downright_red' },   // down-left walk = down-right walk mirrored
+    attack: ['downleft','downleft_red','upleft','upleft_red'],
+  },
+};
+async function loadAnim(sprite, folder){
+  // probe frames in parallel chunks until the first gap
+  const probe = async makeSrc => {
+    const out = [];
+    for (let start = 0; start < 60; start += 12){
+      const batch = [];
+      for (let i = start; i < start+12 && i < 60; i++) batch.push(tryLoad(makeSrc(i)));
+      const res = await Promise.all(batch);
+      for (const r of res){ if (!r) return out; out.push(r); }
+    }
+    return out;
+  };
+  const base = folder ? `Troop/${folder}/` : '';
+  const move = await probe(i => `${IMGDIR}${base}${sprite}Move${i}.png`);
+  const attack = await probe(i => `${IMGDIR}${base}${sprite}Attack${i}.png`);
+  FRAMES[sprite] = { move, attack };
+  // per-direction variant folders: Troop/<folder>/Move/Move_<dir>/0.png (raw frames, any resolution)
+  if (folder && await tryLoad(`${IMGDIR}${base}Move/Move_down/0.png`)){
+    const DIRS = ['down','up','downleft','downright','upleft','upright'];
+    const loadDir = async (kind, name) => {
+      const out = [];
+      for (let s0 = 0; s0 < 60; s0 += 12){
+        const res = await Promise.all(Array.from({length: Math.min(12, 60-s0)}, (_,j) => tryLoad(`${IMGDIR}${base}${kind}/${kind}_${name}/${s0+j}.png`)));
+        for (const r of res){ if (!r) return out; out.push(r); }
+      }
+      return out;
+    };
+    const moveDir = {}, attackDir = {};
+    for (const d of DIRS){
+      moveDir[d] = await loadDir('Move', d);
+      moveDir[d + '_red'] = await loadDir('Move', d + '_red');
+      attackDir[d] = await loadDir('Attack', d);
+      attackDir[d + '_red'] = await loadDir('Attack', d + '_red');
+    }
+    FRAMES[sprite].moveDir = moveDir;
+    FRAMES[sprite].attackDir = attackDir;
+    const flip = FLIP_DIRS[sprite];
+    if (flip){
+      const flipH = arr => arr.map(img => {
+        if (!img) return img;
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+        const cx = c.getContext('2d');
+        cx.translate(img.width, 0); cx.scale(-1, 1); cx.drawImage(img, 0, 0);
+        return c;
+      });
+      const flipV = arr => arr.map(img => {
+        if (!img) return img;
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+        const cx = c.getContext('2d');
+        cx.translate(0, img.height); cx.scale(1, -1); cx.drawImage(img, 0, 0);
+        return c;
+      });
+      for (const d of flip.move || []) if (moveDir[d] && moveDir[d].length) moveDir[d] = flipH(moveDir[d]);
+      for (const d of flip.attack || []) if (attackDir[d] && attackDir[d].length) attackDir[d] = flipH(attackDir[d]);
+      for (const [to, from] of Object.entries(flip.mirror || {})){
+        if (moveDir[from] && moveDir[from].length) moveDir[to] = flipH(moveDir[from]);
+      }
+      // no up-facing attack in the export — the back-side attack is the front swing flipped vertically
+      for (const s of ['','_red']){
+        const dn = attackDir['down' + s];
+        if ((!attackDir['up' + s] || !attackDir['up' + s].length) && dn && dn.length) attackDir['up' + s] = flipV(dn);
+      }
+    }
+  }
+}
+async function loadKnightCR(progress){
+  const specs = [
+    ['knightBlueMoveAtlas','Troop/KnightCR/KnightMoveBlueAtlas.png'],
+    ['knightRedMoveAtlas','Troop/KnightCR/KnightMoveRedAtlas.png'],
+    ['knightBlueAttackAtlas','Troop/KnightCR/KnightAttackBlueAtlas.png'],
+    ['knightRedAttackAtlas','Troop/KnightCR/KnightAttackRedAtlas.png'],
+  ];
+  await Promise.all(specs.map(([key,file]) => progress(loadImg(key, IMGDIR + file))));
+  const [blueMove,redMove,blueAttack,redAttack] = specs.map(([key]) => IMG[key]);
+  if (!blueMove || !redMove || !blueAttack || !redAttack) return;
+
+  const CELL = 160;
+  const sliceDirection = (atlas, direction, frames, maxHeight = 0) => {
+    const out = [];
+    for (let frame = 0; frame < frames; frame++){
+      const canvas = document.createElement('canvas');
+      canvas.width = CELL; canvas.height = CELL;
+      const cctx = canvas.getContext('2d', { willReadFrequently: true });
+      cctx.drawImage(atlas, direction*CELL, frame*CELL, CELL, CELL, 0, 0, CELL, CELL);
+      if (maxHeight){
+        const pixels = cctx.getImageData(0, 0, CELL, CELL).data;
+        let top = CELL, bottom = -1;
+        for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++){
+          if (pixels[(y*CELL+x)*4+3] > 8){ top = Math.min(top,y); bottom = Math.max(bottom,y); }
+        }
+        const visibleHeight = bottom - top + 1;
+        // Shrink oversized attack poses, anchored to the feet, so the Knight keeps one size.
+        if (visibleHeight > maxHeight){
+          const fit = maxHeight / visibleHeight;
+          const normalized = document.createElement('canvas');
+          normalized.width = CELL; normalized.height = CELL;
+          normalized.getContext('2d').drawImage(canvas, (CELL-CELL*fit)/2, CELL-CELL*fit, CELL*fit, CELL*fit);
+          out.push(normalized);
+          continue;
+        }
+      }
+      out.push(canvas);
+    }
+    return out;
+  };
+  const moveDir = {}, attackDir = {};
+  KNIGHT_FACES.forEach((face,index) => {
+    moveDir[face] = sliceDirection(blueMove,index,12);
+    moveDir[face+'_red'] = sliceDirection(redMove,index,12);
+    attackDir[face] = sliceDirection(blueAttack,index,14,126);
+    attackDir[face+'_red'] = sliceDirection(redAttack,index,15,126);
+  });
+  FRAMES.Knight = { ...FRAMES.Knight, moveDir, attackDir, knightCR:true };
+}
+function tintImage(img, color){
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const cx = c.getContext('2d');
+  cx.filter = 'hue-rotate(215deg) saturate(1.15)';
+  cx.drawImage(img, 0, 0);
+  return c;
+}
+async function loadAllAssets(){
+  const single = [
+    ['bgGame','BackgroundGame.png'],['bgScreen','BackgroundScreen.png'],['bgDiff','BackgroundDifficulty.png'],
+    ['logo','ScreenLogo.png'],['menuText','MenuText.png'],['screenText','ScreenText.png'],
+    ['btnStart','ButtonStart.png'],['btnEasy','ButtonEasy.png'],['btnMedium','ButtonMedium.png'],['btnHard','ButtonHard.png'],
+    ['towerUpKing','TowerUpKing.png'],['towerUpPrincess','TowerUpPrincess.png'],
+    ['towerUpKingBlue','TowerUpKingBlue.png'],['towerUpPrincessBlue','TowerUpPrincessBlue.png'],
+    ['towerDownKing','TowerDownKing.png'],['towerDownPrincess','TowerDownPrincess.png'],['towerDownPrincessDead','TowerDownPrincessDestroyed.png'],
+    ['cannon','Cannon.png'],['cannonBase','CannonBase.png'],['cannonBarrel','CannonBarrel.png'],
+    ['pjArrow','ProjectileArrow.png'],['pjSpear','ProjectileSpear.png'],['pjCanonball','ProjectileCanonball.png'],['pjFireball','ProjectileFireball.png'],
+    ['endVictory','EndVictory.png'],['endDefeat','EndDefeat.png'],['endDraw','EndDraw.png'],
+    ['doubleElixir','TextDoubleElixir.png'],['cardNext','CardNext.png'],
+    ['circleFireball','CircleFireball.png'],['circlePoison','CirclePoison.png'],
+    ['elixirIcon','ElixirIcon.webp'],['clock','Clock.png'],
+    ['towerDestroyed','TowerDestroyed.png'],['crown','Crown.png'],
+    ['arena1','Arena1.png'],['arena2','Arena2.png'],['arena3','Arena3.png'],['arena4','Arena4.png'],
+  ];
+  for (let s = 0; s <= 3; s++) single.push(['score'+s, `Score${s}.png`]);
+  const step = (from, to) => {
+    let done = 0; const total = Math.max(1, to - from);
+    return () => { done++; const p = from + (to-from)*done/total;
+      ui.loadBar.style.width = Math.min(99, p) + '%';
+      ui.loadStep.textContent = `Loading cards… ${Math.round(Math.min(99,p))}%`; };
+  };
+  const phase = (from, to) => { const tick = step(from, to); return p => p.then(r => { tick(); return r; }); };
+
+  // phase 1: single images (0-35%)
+  const singleProgress = phase(0,35);
+  await Promise.all(single.map(([k,f]) => singleProgress(loadImg(k, IMGDIR+f))));
+  // phase 2: card images (35-50%)
+  const cardName = {archers:'Archer',babydragon:'DragonBaby',fireball:'Fireball',giant:'Giant',speargoblins:'GoblinSpear',golem:'Golem',knight:'Knight',minipekka:'PekkaMini',poison:'Poison',skeletons:'Skeleton',cannon:'Cannon',skeletonarmy:'SkeletonArmy',arrows:'Arrows'};
+  const cardProgress = phase(35,50);
+  await Promise.all(ALL_CARD_KEYS.map(k => cardProgress(loadImg('card_'+k, IMGDIR+'Card'+cardName[k]+'.png'))));
+  // phase 3: spell animations (50-60%)
+  {
+    const mv = [], at = [];
+    const probeChunk = async (makeSrc, cap) => {
+      const out = [];
+      for (let s0 = 0; s0 < cap; s0 += 12){
+        const res = await Promise.all(Array.from({length: Math.min(12, cap-s0)}, (_,j) => tryLoad(makeSrc(s0+j))));
+        for (const r of res){ if (!r) return out; out.push(r); }
+      }
+      return out;
+    };
+    const pm = probeChunk(i => `${IMGDIR}Spell/Fireball/FireballMove${i}.png`, 20);
+    const pa = probeChunk(i => `${IMGDIR}Spell/Fireball/FireballAttack${i}.png`, 20);
+    const pp = probeChunk(i => `${IMGDIR}Spell/Poison/PoisonAttack${i}.png`, 60);
+    const parr = probeChunk(i => `${IMGDIR}Spell/Arrows/effects_sprite_${443+i}.png`, 12);
+    const spellProgress = phase(50,60);
+    const [rm, ra, rp, rarr] = await Promise.all([pm, pa, pp, parr].map(spellProgress));
+    // the raw arrow export uses huge 474x537 canvases with a tiny ~40x8 arrow in
+    // the middle — crop every frame to its drawn content so it renders visibly
+    const cropped = [];
+    for (const img of rarr){
+      if (!img) { cropped.push(img); continue; }
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const cx = c.getContext('2d'); cx.drawImage(img, 0, 0);
+      const d = cx.getImageData(0, 0, img.width, img.height).data;
+      let x0 = img.width, y0 = img.height, x1 = -1, y1 = -1;
+      for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++){
+        if (d[(y*img.width+x)*4+3] > 30){
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+      }
+      if (x1 < 0){ cropped.push(img); continue; }
+      const pad = 2;
+      x0 = Math.max(0, x0-pad); y0 = Math.max(0, y0-pad); x1 = Math.min(img.width-1, x1+pad); y1 = Math.min(img.height-1, y1+pad);
+      const c2 = document.createElement('canvas'); c2.width = x1-x0+1; c2.height = y1-y0+1;
+      c2.getContext('2d').drawImage(c, x0, y0, c2.width, c2.height, 0, 0, c2.width, c2.height);
+      cropped.push(c2);
+    }
+    FRAMES.SpellFireball = { move:rm, attack:ra };
+    FRAMES.SpellPoison = { move:[], attack:rp };
+    FRAMES.SpellArrows = { move:[], attack:cropped };   // flying-arrow frames, played in reverse (raw export is backwards)
+  }
+  // phase 4: troop animations (60-90%)
+  const troops = [['Knight','Knight'],['Archer','Archer'],['Skeleton','Skeleton'],['Giant','Giant'],['PekkaMini','PekkaMini'],['DragonBaby','DragonBaby'],['GoblinSpear','GoblinSpear'],['Golem','Golem'],['Golemite','Golemite']];
+  const troopProgress = phase(60,90);
+  await Promise.all(troops.map(([s,f]) => troopProgress(loadAnim(s,f))));
+  // phase 5: directional Clash Royale Knight animations (90-100%)
+  if (USE_NEW_KNIGHT) await loadKnightCR(phase(90,100));
+  else ui.loadBar.style.width = '100%';
+  ui.loadBar.style.width = '100%'; ui.loadStep.textContent = 'Ready!';
+}
+
+/* ---------------- DOM helpers ---------------- */
+const $ = id => document.getElementById(id);
+const ui = {};
+['loadBar','loadStep','screen-intro','screen-loading','screen-title','screen-menu','screen-deck','screen-difficulty','screen-battle','screen-result',
+ 'introLogo',
+ 'deckGrid','deckSlots','deckCount','handRow','nextCard','elixirBar','elixirFill','elixirNum','gameCanvas','canvasWrap','timerLabel','phaseLabel',
+ 'playerCrowns','enemyCrowns','resultImg','resultCrowns','resultTrophies','arenaInfo','arenaModal','arenaModalCard','howModal','pauseModal','toastRoot'].forEach(id => ui[id.replace(/-(\w)/g,(m,c)=>c.toUpperCase())] = $(id));
+
+function showScreen(id){
+  ['screen-intro','screen-loading','screen-title','screen-menu','screen-deck','screen-difficulty','screen-battle','screen-result']
+    .forEach(s => ui[s.replace(/-(\w)/g,(m,c)=>c.toUpperCase())].classList.toggle('hidden', s !== id));
+  if (id === 'screen-menu') updateArenaInfo();
+}
+function updateArenaInfo(){
+  const idx = arenaIndex();
+  const a = ARENAS[idx];
+  const next = ARENAS[idx+1];
+  ui.arenaInfo.innerHTML =
+    `<div class="arena-frame" id="arenaFrame" title="View arenas">` +
+      `<img src="${IMG['arena'+(idx+1)].src}" alt="${a.name}">` +
+      `<div class="arena-trophy">🏆 ${G.trophies}</div>` +
+      `<div class="arena-name">Arena ${idx+1} — ${a.name}</div>` +
+    `</div>` +
+    (next ? `<div class="arena-progress"><div class="arena-progress-fill" style="width:${Math.min(100, Math.round(100*(G.trophies-a.min)/(next.min-a.min)))}%"></div></div>` : '');
+  $('arenaFrame').addEventListener('click', openArenaModal);
+}
+function openArenaModal(){
+  const idx = arenaIndex();
+  let html = `<h3 class="arena-modal-title">${ARENAS[idx].name}</h3><div class="arena-track">`;
+  // list from highest arena down, like real CR arena progression
+  for (let i = ARENAS.length-1; i >= 0; i--){
+    const a = ARENAS[i];
+    const prev = ARENAS[i-1];
+    const unlocks = ALL_CARD_KEYS.filter(k => CARDS[k].unlockTrophies !== undefined &&
+      CARDS[k].unlockTrophies <= a.min && (prev === undefined || CARDS[k].unlockTrophies > prev.min));
+    const locked = G.trophies < a.min;
+    html += `<div class="arena-row${i === idx ? ' current' : ''}${locked ? ' locked' : ''}">` +
+      `<div class="arena-row-img"><img src="${IMG['arena'+(i+1)].src}" alt="${a.name}"></div>` +
+      `<div class="arena-row-body">` +
+        `<div class="arena-row-name">Arena ${i+1} — ${a.name}</div>` +
+        `<div class="arena-row-req">${locked ? '🔒 Unlocks at ' : '🏆 '}${a.min} trophies</div>` +
+        (unlocks.length ? `<div class="arena-row-unlocks">Card unlocks: ${unlocks.map(k => `<img class="unlock-card" src="${IMG['card_'+k].src}" alt="${CARDS[k].label}" title="${CARDS[k].label}">`).join('')}</div>` : '') +
+      `</div></div>`;
+  }
+  html += `</div><button class="img-btn small" id="btnArenaClose">OK</button>`;
+  ui.arenaModalCard.innerHTML = html;
+  ui.arenaModal.classList.remove('hidden');
+  $('btnArenaClose').addEventListener('click', () => ui.arenaModal.classList.add('hidden'));
+}
+function toast(msg){
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  ui.toastRoot.appendChild(t); setTimeout(()=>t.remove(), 1800);
+}
+
+/* ---------------- state ---------------- */
+const G = {
+  screenState: 'menu',
+  difficulty: localStorage.getItem('tcr_diff') || 'medium',
+  deck: JSON.parse(localStorage.getItem('tcr_deck') || 'null') || DEFAULT_DECK.slice(),
+  trophies: parseInt(localStorage.getItem('tcr_trophies') || '0', 10) || 0,
+};
+function saveTrophies(){ localStorage.setItem('tcr_trophies', String(G.trophies)); }
+
+/* ================= DECK BUILDER ================= */
+function renderDeckScreen(){
+  // 8 deck slots
+  ui.deckSlots.innerHTML = '';
+  for (let i = 0; i < 8; i++){
+    const slot = document.createElement('div');
+    slot.className = 'deck-slot';
+    const k = G.deck[i];
+    if (k){
+      slot.innerHTML = `<img src="${IMG['card_'+k].src}" alt=""><span class="cost-badge">${CARDS[k].cost}</span>`;
+      slot.addEventListener('click', () => { G.deck.splice(i,1); renderDeckScreen(); SFX.beep(); });
+    } else {
+      slot.innerHTML = `<span class="slot-plus">+</span>`;
+    }
+    ui.deckSlots.appendChild(slot);
+  }
+  // scrollable collection
+  ui.deckGrid.innerHTML = '';
+  ALL_CARD_KEYS.forEach(k => {
+    const c = CARDS[k];
+    const locked = c.unlockTrophies && G.trophies < c.unlockTrophies;
+    const el = document.createElement('div');
+    el.className = 'deck-card' + (G.deck.includes(k) ? ' selected' : '') + (locked ? ' locked' : '');
+    el.dataset.key = k;
+    el.innerHTML = `<img draggable="false" src="${IMG['card_'+k].src}" alt="${c.label}"><span class="cost-badge">${c.cost}</span><span class="card-name">${c.label}</span>` +
+      (locked ? `<span class="lock-badge">🔒 ${c.unlockTrophies} trophies</span>` : '');
+    if (locked) return;   // locked: shown greyed, not clickable
+    el.addEventListener('click', () => {
+      if (dragScroll.moved) return;   // ignore click at end of a scroll drag
+      const i = G.deck.indexOf(k);
+      const fromRect = el.getBoundingClientRect();
+      if (i >= 0){
+        // deselect: card flies back from deck slot to the collection
+        G.deck.splice(i,1);
+        renderDeckScreen();
+        const cardEl = ui.deckGrid.querySelector(`.deck-card[data-key="${k}"]`);
+        if (cardEl){
+          const toRect = cardEl.getBoundingClientRect();
+          cardEl.style.visibility = 'hidden';
+          flyClone(IMG['card_'+k].src, fromRect, toRect, () => {
+            cardEl.style.visibility = '';
+            cardEl.classList.add('landed');
+            setTimeout(()=>cardEl.classList.remove('landed'), 340);
+          });
+        }
+      } else {
+        if (G.deck.length >= 8){ toast('Deck is full — tap a deck card to remove it'); shakeEl(ui.deckSlots); return; }
+        // select: card flies from the collection into the empty deck slot
+        G.deck.push(k);
+        const slotIdx = G.deck.length - 1;
+        renderDeckScreen();
+        const slot = ui.deckSlots.children[slotIdx];
+        if (slot){
+          const toRect = slot.getBoundingClientRect();
+          slot.style.visibility = 'hidden';
+          flyClone(IMG['card_'+k].src, fromRect, toRect, () => {
+            slot.style.visibility = '';
+            slot.classList.add('landed');
+            setTimeout(()=>slot.classList.remove('landed'), 340);
+          });
+        }
+      }
+      SFX.beep();
+    });
+    ui.deckGrid.appendChild(el);
+  });
+  updateDeckCount();
+}
+const dragScroll = { moved:false };
+const deckCardDrag = { active:false };
+function shakeEl(el){
+  el.classList.remove('shake-x'); void el.offsetWidth;
+  el.classList.add('shake-x'); setTimeout(()=>el.classList.remove('shake-x'), 320);
+}
+function flyClone(src, from, to, done){
+  const c = document.createElement('div');
+  c.className = 'fly-clone';
+  c.innerHTML = `<img draggable="false" src="${src}">`;
+  c.style.left = from.left+'px'; c.style.top = from.top+'px';
+  c.style.width = from.width+'px'; c.style.height = from.height+'px';
+  document.body.appendChild(c);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    c.style.transform = `translate(${to.left-from.left}px, ${to.top-from.top}px) scale(${to.width/from.width}, ${to.height/from.height})`;
+  }));
+  setTimeout(() => { c.remove(); if (done) done(); }, 390);
+}
+function wireDeckScroll(){
+  const grid = ui.deckGrid;
+  let drag = null;
+  // mouse: drag to pan (touch/trackpad use native scrolling)
+  grid.addEventListener('pointerdown', ev => {
+    if (ev.pointerType !== 'mouse') return;
+    drag = { y0: ev.clientY, top0: grid.scrollTop, moved: false, id: ev.pointerId };
+  });
+  window.addEventListener('pointermove', ev => {
+    if (deckCardDrag.active) return;   // card drag takes priority over scroll pan
+    if (!drag || ev.pointerId !== drag.id) return;
+    const dy = ev.clientY - drag.y0;
+    if (!drag.moved && Math.abs(dy) > 6){ drag.moved = true; grid.classList.add('dragging'); }
+    grid.scrollTop = drag.top0 - dy;
+  });
+  window.addEventListener('pointerup', ev => {
+    if (!drag || ev.pointerId !== drag.id) return;
+    dragScroll.moved = drag.moved;
+    drag = null;
+    grid.classList.remove('dragging');
+    setTimeout(() => { dragScroll.moved = false; }, 60);
+  });
+}
+function wireDeckCardDrag(){
+  let st = null;
+  ui.deckGrid.addEventListener('pointerdown', ev => {
+    const card = ev.target.closest('.deck-card');
+    if (!card || ev.pointerType !== 'mouse') return;
+    st = { key: card.dataset.key, el: card, x0: ev.clientX, y0: ev.clientY, r: card.getBoundingClientRect(), active:false, clone:null, overSlot:null };
+  });
+  window.addEventListener('pointermove', ev => {
+    if (!st) return;
+    if (!st.active){
+      if (Math.hypot(ev.clientX-st.x0, ev.clientY-st.y0) < 8) return;
+      st.active = true; deckCardDrag.active = true;
+      st.clone = document.createElement('div');
+      st.clone.className = 'fly-clone holding';
+      st.clone.innerHTML = `<img draggable="false" src="${IMG['card_'+st.key].src}">`;
+      st.clone.style.left = st.r.left+'px'; st.clone.style.top = st.r.top+'px';
+      st.clone.style.width = st.r.width+'px'; st.clone.style.height = st.r.height+'px';
+      document.body.appendChild(st.clone);
+      st.el.classList.add('drag-origin');
+    }
+    ev.preventDefault();
+    st.clone.style.left = (ev.clientX - st.r.width/2)+'px';
+    st.clone.style.top  = (ev.clientY - st.r.height/2)+'px';
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const slot = under && under.closest ? under.closest('.deck-slot') : null;
+    document.querySelectorAll('.deck-slot.drop-target').forEach(s => s.classList.remove('drop-target'));
+    if (slot) slot.classList.add('drop-target');
+    st.overSlot = slot;
+  });
+  window.addEventListener('pointerup', () => {
+    if (!st) return;
+    if (st.active){
+      deckCardDrag.active = false;
+      dragScroll.moved = true; setTimeout(()=>{ dragScroll.moved = false; }, 60);
+      const slot = st.overSlot;
+      document.querySelectorAll('.deck-slot.drop-target').forEach(s => s.classList.remove('drop-target'));
+      st.clone.remove();
+      st.el.classList.remove('drag-origin');
+      if (slot){
+        const idx = [...ui.deckSlots.children].indexOf(slot);
+        const key = st.key;
+        const at = G.deck.indexOf(key);
+        const occupant = G.deck[idx];
+        if (idx >= 0 && idx !== at){
+          if (at >= 0){
+            if (occupant){ G.deck[at] = occupant; G.deck[idx] = key; }   // swap two deck cards
+            else { G.deck.splice(at,1); G.deck.splice(idx,0,key); }      // reorder
+          } else {
+            G.deck[idx] = key;                                           // replace / fill slot
+          }
+          renderDeckScreen(); SFX.beep();
+        }
+      }
+    }
+    st = null;
+  });
+}
+function updateDeckCount(){
+  ui.deckCount.textContent = `${G.deck.length} / 8`;
+  ui.deckCount.style.color = G.deck.length === 8 ? '#8ee6ff' : '#ffb0b0';
+}
+
+/* ================= BATTLE MODEL ================= */
+let battle = null;
+
+function makeSide(side){
+  return {
+    side, elixir: 5, crowns: 0,
+    queue: [], hand: [], next: null,
+    princessDead: { L:false, R:false },
+  };
+}
+function shuffle(a){ for (let i = a.length-1; i > 0; i--){ const j = (Math.random()*(i+1))|0; [a[i],a[j]] = [a[j],a[i]]; } return a; }
+function initHand(side, deck){
+  const q = shuffle(deck.slice());
+  side.hand = q.slice(0,4); side.next = q[4]; side.queue = q.slice(5);
+}
+function cycleCard(side, idx){
+  const played = side.hand.splice(idx,1)[0];
+  side.hand.push(side.next);
+  side.queue.push(played);
+  side.next = side.queue.shift();
+}
+
+function makeTower(side, kind, x, y, lane){
+  return {
+    kind, side, lane, x, y,
+    hp: kind==='king' ? 5593 : 3052,
+    maxHp: kind==='king' ? 5593 : 3052,
+    dmg: kind==='king' ? 335 : 109,
+    hitSpeed: kind==='king' ? 1.0 : 0.8,
+    range: 44,
+    radius: kind==='king' ? 21 : 17,
+    active: kind!=='king',
+    cd: 0, dead: false,
+  };
+}
+
+function startBattle(){
+  SFX.battle();
+  const deck = G.deck.length === 8 ? G.deck : DEFAULT_DECK;
+  battle = {
+    time: MATCH_TIME, overtime: false, over: false, resultShown: false,
+    units: [], towers: [], projectiles: [], effects: [], banners: [],
+    player: makeSide('player'), enemy: makeSide('enemy'),
+    doubleElixir: false, doubleBannerT: 0,
+    startBannerT: 2.0,
+    aiTimer: 2.0, selected: -1, dragCanvas: null, pointerPos: null, pendingPlace: null,
+    idc: 0,
+  };
+  initHand(battle.player, deck);
+  initHand(battle.enemy, deck);
+  const t = battle.towers;
+  t.push(makeTower('enemy','king',200,83));
+  t.push(makeTower('enemy','princess',95,131,'L'));
+  t.push(makeTower('enemy','princess',305,131,'R'));
+  t.push(makeTower('player','king',200,406));
+  t.push(makeTower('player','princess',95,378,'L'));
+  t.push(makeTower('player','princess',305,378,'R'));
+  // AI difficulty rises with the arena (training camp = easy, higher arenas = harder)
+  const arenaDiff = ['easy','medium','hard','hard'][Math.min(3, arenaIndex())];
+  battle.ai = makeAI(arenaDiff, arenaIndex());
+  showScreen('screen-battle');
+  renderHand();
+  SFX.beep();
+}
+
+/* ---------------- units ---------------- */
+function spawnUnit(sideKey, card, x, y, isSpawnChild){
+  const b = battle;
+  const stat = isSpawnChild || card;
+  const offsets = [];
+  const n = isSpawnChild ? 1 : card.count;
+  if (n === 1) offsets.push([0,0]);
+  else if (n === 2) offsets.push([-11,0],[11,0]);
+  else if (n === 3) offsets.push([0,-10],[-11,8],[11,8]);
+  else {
+    // spread grid formation for big groups (skeleton army etc.)
+    const cols = 4, sp = 19, rows = Math.ceil(n / cols);
+    for (let i = 0; i < n; i++){
+      const col = i % cols, row = (i / cols) | 0;
+      const jx = (Math.random()-0.5) * 7, jy = (Math.random()-0.5) * 7;
+      offsets.push([(col - (cols-1)/2) * sp + jx, (row - (rows-1)/2) * sp + jy]);
+    }
+  }
+  const made = [];
+  offsets.forEach(o => {
+    const u = {
+      id: ++b.idc, side: sideKey,
+      cardKey: (!isSpawnChild && card) ? card.key : null,
+      sprite: isSpawnChild ? stat.sprite : card.sprite,
+      hp: isSpawnChild ? stat.hp : card.hp, maxHp: isSpawnChild ? stat.hp : card.hp,
+      dmg: isSpawnChild ? stat.dmg : card.dmg,
+      hitSpeed: isSpawnChild ? stat.hitSpeed : card.hitSpeed,
+      range: isSpawnChild ? stat.range : card.range,
+      speed: isSpawnChild ? stat.speed : card.speed,
+      radius: isSpawnChild ? stat.radius : card.radius,
+      targets: isSpawnChild ? stat.targets : card.targets,
+      buildingsOnly: !!stat.buildingsOnly,
+      flying: !!stat.flying,
+      splash: stat.splash || 0,
+      projectile: stat.projectile || null,
+      building: !!stat.building,
+      noShadow: !!stat.noShadow,
+      cardKey: stat.key || null,
+      lifetime: stat.lifetime || 0,
+      deathSpawn: stat.deathSpawn || null,
+      deathCount: stat.deathCount || 0,
+      aimAng: 0,
+      scale: stat.scale || 1.3,
+      face: sideKey === 'player' ? 'up' : 'down',   // player marches up-screen, enemy down
+      x: x + o[0], y: y + o[1],
+      target: null, retargetT: 0, atkCd: 0,
+      animT: Math.random()*10, walkDist: 0,
+      attackAnimT: -1, attackAnimDur: 0, pendingHit: null, hitDone: false,
+      dead: false, spawnT: 1.0,   // standard 1.0s deploy time (spells are instant on landing)
+    };
+    if (u.projectile === 'fireball') u.projectileSprite = 'pjFireball';
+    if (u.projectile === 'canonball') u.projectileSprite = 'pjCanonball';
+    battle.units.push(u); made.push(u);
+  });
+  // a newly placed building pulls nearby troops off their tower target
+  if (!isSpawnChild && card && card.building && made.length){
+    const bld = made[0];
+    for (const f of battle.units){
+      if (f.side === sideKey || f.dead || !f.target || f.target.dead) continue;
+      if (f.target.kind){   // currently bound to a tower
+        if (dist(f, bld) < dist(f, f.target)) f.target = bld;
+      }
+    }
+  }
+  battle.effects.push({ type:'spawn', x, y, t:0, dur:0.4 });
+  return made;
+}
+
+function inField(x,y){ return x > FIELD.x0 && x < FIELD.x1 && y > FIELD.y0 && y < FIELD.y1; }
+
+function deployValid(cardKey, x, y, sideKey){
+  const card = CARDS[cardKey];
+  if (!inField(x,y)) return false;
+  if (card.spell) return true;
+  // can't deploy on top of any tower (alive or rubble)
+  for (const t of battle.towers){
+    if (Math.hypot(x - t.x, y - t.y) < t.radius + 15) return false;
+  }
+  const side = sideKey === 'player' ? battle.player : battle.enemy;
+  if (sideKey === 'player'){
+    if (y >= RIVER_Y + 12) return true;
+    // enemy territory: allowed in a lane if that princess tower is destroyed
+    const lane = x < 200 ? 'L' : 'R';
+    const pIdx = lane === 'L' ? 1 : 2;
+    return y > 195 && battle.towers[pIdx].dead;
+  } else {
+    if (y <= RIVER_Y - 12) return true;
+    const lane = x < 200 ? 'L' : 'R';
+    const pIdx = lane === 'L' ? 4 : 5;
+    return y < 405 && battle.towers[pIdx].dead;
+  }
+}
+
+function playerDeploy(cardKey, x, y){
+  const card = CARDS[cardKey];
+  if (battle.player.elixir < card.cost) return false;
+  if (!deployValid(cardKey, x, y, 'player')) return false;
+  battle.player.elixir -= card.cost;
+  if (card.spell) castSpell('player', cardKey, x, y);
+  else spawnUnit('player', card, x, y);
+  SFX.card(cardKey);
+  return true;
+}
+function enemyDeploy(cardKey, x, y){
+  const card = CARDS[cardKey];
+  if (battle.enemy.elixir < card.cost) return false;
+  if (!deployValid(cardKey, x, y, 'enemy')) return false;
+  battle.enemy.elixir -= card.cost;
+  if (card.spell) castSpell('enemy', cardKey, x, y);
+  else spawnUnit('enemy', card, x, y);
+  SFX.card(cardKey);
+  return true;
+}
+
+function castSpell(side, cardKey, x, y){
+  const card = CARDS[cardKey];
+  if (cardKey === 'fireball'){
+    battle.projectiles.push({
+      type:'spellFireball', side, x, y: Math.max(40, y-160), tx:x, ty:y,
+      speed: 320, dmg: card.dmg, radius: card.radius, towerFactor: card.towerFactor,
+      animT: 0, done:false,
+    });
+    SFX.play('spell_fireball', 0.8);
+  } else if (cardKey === 'poison'){
+    battle.effects.push({ type:'poison', side, x, y, r: card.radius, dps: card.dps, towerFactor: card.towerFactor, t:0, dur: card.duration, tickT:0 });
+    SFX.play('spell_poison', 0.8);
+  } else if (cardKey === 'arrows'){
+    // volley: 5 arrows at a time stream out of the caster's king tower, landing scattered in the damage area
+    const volley = { hit:false };                       // full damage applies once, on the first landing
+    const king = battle.towers.find(t => t.side === side && t.kind === 'king' && !t.dead)
+              || battle.towers.find(t => t.side === side && t.kind === 'king');
+    const sx = king ? king.x : (side === 'player' ? 200 : 200);
+    const sy = king ? king.y : (side === 'player' ? 640 : 40);
+    for (let i = 0; i < 5; i++){
+      const ang = Math.random()*Math.PI*2, rr = Math.random()*card.radius*0.55;
+      const tx = x + Math.cos(ang)*rr, ty = y + Math.sin(ang)*rr*0.8;
+      battle.projectiles.push({
+        type:'spellArrow', side, volley,
+        x: sx + (Math.random()*24-12), y: sy + (Math.random()*24-12),
+        tx, ty, speed: 430,
+        dmg: card.dmg, radius: card.radius, towerFactor: card.towerFactor,
+        animT: 0, delay: i*0.1, done:false,
+      });
+    }
+    SFX.play('spell_arrows', 0.8);
+  }
+}
+
+/* ---------------- targeting & movement ---------------- */
+function enemiesOf(sideKey){ return battle.units.filter(u => u.side !== sideKey && !u.dead); }
+function buildingsOf(sideKey){
+  const list = battle.towers.filter(t => t.side === sideKey && !t.dead);
+  return list.concat(battle.units.filter(u => u.side === sideKey && u.building && !u.dead));
+}
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+// ranged fire can't cross the river except over a bridge
+function riverBlocked(a, b){
+  const aTop = a.y < RIVER_Y, bTop = b.y < RIVER_Y;
+  if (aTop === bTop) return false;
+  const mx = (a.x + b.x) / 2;
+  return !(Math.abs(mx - BRIDGE_L) <= BRIDGE_HALF + 8 || Math.abs(mx - BRIDGE_R) <= BRIDGE_HALF + 8);
+}
+
+function kingTargetable(u, king){
+  // troops always hit a standing princess first; the king opens up in its lane
+  const defenderSide = king.side;
+  const prs = battle.towers.filter(t => t.side === defenderSide && t.kind === 'princess' && !t.dead);
+  if (prs.length === 0) return true;                    // both down -> king free
+  if (prs.length === 2) return false;                   // pocket placements go to a princess first
+  // one princess down: king is only fair game on that side of the arena
+  const deadLaneX = battle.towers.find(t => t.side === defenderSide && t.kind === 'princess' && t.dead).x;
+  return (u.x < 200) === (deadLaneX < 200);
+}
+function acquireTarget(u){
+  const foes = enemiesOf(u.side);
+  const ranged = u.range > 30;
+  // nearest valid enemy troop (any distance) — troops beat buildings in real CR,
+  // but the closest target overall wins so units never trek across the arena
+  let nearTroop = null, troopD = 1e9;
+  if (!u.buildingsOnly){
+    for (const f of foes){
+      if (f.building) continue;
+      if (f.flying && u.targets === 'ground') continue;
+      if (ranged && riverBlocked(u, f)) continue;
+      const d = dist(u,f) - f.radius;
+      if (d < troopD){ nearTroop = f; troopD = d; }
+    }
+  }
+  // nearest valid enemy tower/building
+  let nearBld = null, bldD = 1e9;
+  for (const b of buildingsOf(u.side === 'player' ? 'enemy' : 'player')){
+    if (b.kind === 'king' && !kingTargetable(u, b)) continue;
+    if (ranged && riverBlocked(u, b)) continue;
+    const d = dist(u,b);
+    if (d < bldD){ nearBld = b; bldD = d; }
+  }
+  if (!nearBld){
+    // everything was river-blocked — walk toward the nearest tower anyway;
+    // bridge pathing will carry the unit across
+    for (const b of buildingsOf(u.side === 'player' ? 'enemy' : 'player')){
+      if (b.kind === 'king' && !kingTargetable(u, b)) continue;
+      const d = dist(u,b);
+      if (d < bldD){ nearBld = b; bldD = d; }
+    }
+  }
+  // pick whichever is genuinely closer (troop distances get a small bias to
+  // keep melee units from peeling off a tower they are actively hitting)
+  if (nearTroop && (!nearBld || troopD <= bldD + 6)) u.target = nearTroop;
+  else u.target = nearBld || nearTroop;
+}
+
+function moveUpdate(u, dt){
+  if (!u.target || u.target.dead || (u.target.hp !== undefined && u.target.hp <= 0)) { acquireTarget(u); }
+  const tgt = u.target;
+  if (!tgt) return;
+  const reach = u.range + u.radius + (tgt.radius || 8);
+  const d = dist(u, tgt);
+  if (d <= reach){ /* in range */ }
+  else {
+    let gx = tgt.x, gy = tgt.y;
+    if (!u.flying && u.speed > 0){
+      const myTop = u.y < RIVER_Y, tgtTop = tgt.y < RIVER_Y;
+      if (myTop !== tgtTop){
+        const bx = Math.abs(u.x - BRIDGE_L) < Math.abs(u.x - BRIDGE_R) ? BRIDGE_L : BRIDGE_R;
+        if (Math.abs(u.x - bx) > 8){
+          gx = bx; gy = myTop ? RIVER_Y - 30 : RIVER_Y + 30;
+        } else {
+          gx = bx; gy = myTop ? RIVER_Y + 30 : RIVER_Y - 30;
+        }
+      }
+    }
+    const dx = gx - u.x, dy = gy - u.y, dd = Math.hypot(dx,dy) || 1;
+    const step = u.speed * dt;
+    u.x += dx/dd * step; u.y += dy/dd * step;
+    u.walkDist += step;
+    const facingPoint = u.sprite === 'Knight' ? tgt : { x:gx, y:gy };
+    u.face = faceDir(facingPoint.x - u.x, facingPoint.y - u.y, u.sprite); // the Knight keeps its eyes on its target while routing to the bridge
+    if (u.flying) u.y += Math.sin(battle.time + u.id) * 6 * dt; // gentle bob
+  }
+  // keep ground units out of the river unless on a bridge
+  if (!u.flying && Math.abs(u.y - RIVER_Y) <= RIVER_HALF &&
+      Math.abs(u.x - BRIDGE_L) > BRIDGE_HALF && Math.abs(u.x - BRIDGE_R) > BRIDGE_HALF){
+    u.y = RIVER_Y + (u.y >= RIVER_Y ? 1 : -1) * (RIVER_HALF + 1);
+  }
+  u.x = Math.max(14, Math.min(386, u.x));
+  u.y = Math.max(30, Math.min(585, u.y));
+}
+
+const FACE_OPP = { up:'down', down:'up', upleft:'downright', upright:'downleft', downleft:'upright', downright:'upleft', left:'right', right:'left' };
+function faceDir(dx, dy, sprite){
+  // Bearing 0 is up-screen; Knight art has all eight directions.
+  const b = Math.atan2(dx, -dy) * 180 / Math.PI;
+  if (sprite === 'Knight'){
+    const dirs = ['up','upright','right','downright','down','downleft','left','upleft'];
+    return dirs[Math.round(((b + 360) % 360) / 45) % 8];
+  }
+  if (b >= -30 && b < 30) return 'up';
+  if (b >= 30 && b < 90) return 'upright';
+  if (b >= 90 && b < 150) return 'downright';
+  if (b >= 150 || b < -150) return 'down';
+  if (b >= -90 && b < -30) return 'upleft';
+  return 'downleft';
+}
+function animSet(fr, kind, u){
+  // pick the variant set matching this unit's facing and side; fall back gracefully
+  const dirs = kind === 'attack' ? fr.attackDir : fr.moveDir;
+  if (dirs){
+    const face = u.face || 'down';
+    const red = dirs[face + '_red'];
+    if (u.side === 'enemy' && red && red.length) return { set: red, rotate: false };
+    if (u.side === 'enemy'){
+      const oppName = FACE_OPP[face] || face;
+      const oppRed = dirs[oppName + '_red'];
+      if (oppRed && oppRed.length) return { set: oppRed, rotate: true };   // red opposite-face, rotated 180 (back view)
+      const opp = dirs[oppName];
+      if (opp && opp.length) return { set: opp, rotate: true };   // blue opposite-face, rotated 180
+    }
+    const blue = dirs[face];
+    if (blue && blue.length) return { set: blue, rotate: false };
+    // diagonal art missing — fall back to the plain up/down set
+    const vert = (face === 'upleft' || face === 'upright') ? 'up'
+               : (face === 'downleft' || face === 'downright') ? 'down' : face;
+    const vred = dirs[vert + '_red'];
+    if (u.side === 'enemy' && vred && vred.length) return { set: vred, rotate: false };
+    if (u.side === 'enemy' && dirs[vert] && dirs[vert].length) return { set: dirs[vert], rotate: true };
+    if (dirs[vert] && dirs[vert].length) return { set: dirs[vert], rotate: false };
+    // no art for this facing (e.g. no up-facing attack in the export) — show the front swing turned away (back view)
+    if (kind === 'attack' && dirs['down'] && dirs['down'].length){
+      const dred = dirs['down_red'];
+      if (u.side === 'enemy' && dred && dred.length) return { set: dred, rotate: true };
+      return { set: dirs['down'], rotate: true };
+    }
+  }
+  return { set: kind === 'attack' ? fr.attack : fr.move, rotate: u.side === 'enemy' };
+}
+
+function attackUpdate(u, dt){
+  const tgt = u.target;
+  if (!tgt || tgt.dead || tgt.hp <= 0){ u.attackAnimT = -1; return; }
+  const reach = u.range + u.radius + (tgt.radius || 8);
+  if (dist(u,tgt) > reach){ u.attackAnimT = -1; u.pendingHit = null; return; }
+  if (u.range > 30 && riverBlocked(u, tgt)) return;   // no sniping across the river
+  u.atkCd -= dt;
+  if (u.building && tgt) u.aimAng = Math.atan2(tgt.y - u.y, tgt.x - u.x);
+  if (u.atkCd <= 0 && u.attackAnimT < 0){
+    const fr = FRAMES[u.sprite];
+    const n = fr && fr.attack.length ? fr.attack.length : 6;
+    u.attackAnimT = 0;
+    u.attackAnimDur = Math.max(0.4, Math.min(u.hitSpeed, n/7));
+    u.face = faceDir(tgt.x - u.x, tgt.y - u.y, u.sprite); // face the target while swinging
+    u.pendingHit = { t: u.attackAnimDur * 0.55, target: tgt };
+    u.hitDone = false;
+    u.atkCd = u.hitSpeed;
+  }
+  if (u.attackAnimT >= 0){
+    u.attackAnimT += dt;
+    if (u.attackAnimT >= u.attackAnimDur){ u.attackAnimT = -1; }  // anim finished — allow next swing
+    if (u.pendingHit && !u.hitDone){
+      u.pendingHit.t -= dt;
+      if (u.pendingHit.t <= 0){
+        u.hitDone = true;
+        const victim = u.pendingHit.target;
+        if (victim && !victim.dead && victim.hp > 0){
+          SFX.hit(u.cardKey);                       // attack sound lands with the swing
+          if (u.projectile){
+            battle.projectiles.push({
+              type:'unit', x:u.x, y:u.y - 8, target:victim, side:u.side,
+              speed: 300, dmg: u.dmg, splash: u.splash, sprite: u.projectileSprite || 'pjArrow',
+            });
+          } else {
+            dealDamage(victim, u.dmg, u.side);
+          }
+        }
+        u.pendingHit = null;
+      }
+    }
+  }
+}
+
+function dealDamage(victim, dmg, fromSide){
+  if (victim.dead || victim.hp <= 0) return;
+  if (victim.building) dmg *= 0.7;   // buildings are tanky vs tanks like giant/golem/minipekka
+  victim.hp -= dmg;
+  if (victim.kind){ // tower
+    if (!victim.active){ victim.active = true; }
+    if (victim.hp <= 0) destroyTower(victim);
+  } else if (victim.hp <= 0){
+    killUnit(victim);
+  }
+}
+
+function killUnit(u){
+  u.dead = true;
+  if (u.deathSpawn){
+    for (let i = 0; i < u.deathCount; i++){
+      spawnUnit(u.side, null, u.x + (i? 14 : -14), u.y, Object.assign({ sprite:u.deathSpawn.sprite, hp:u.deathSpawn.hp, dmg:u.deathSpawn.dmg, hitSpeed:u.deathSpawn.hitSpeed, range:u.deathSpawn.range, speed:u.deathSpawn.speed, radius:u.deathSpawn.radius, targets:u.deathSpawn.targets, buildingsOnly:u.deathSpawn.buildingsOnly }, {}));
+    }
+  }
+}
+
+function destroyTower(t){
+  t.dead = true; t.hp = 0;
+  const scorer = t.side === 'enemy' ? battle.player : battle.enemy;
+  const kingIdx = battle.towers.indexOf(t);
+  if (t.kind === 'king'){
+    scorer.crowns = 3;
+  } else {
+    scorer.crowns = Math.min(3, scorer.crowns + 1);
+    // activate the king on the defeated side
+    const king = battle.towers.find(k => k.side === t.side && k.kind === 'king');
+    if (king) king.active = true;
+    const defender = t.side === 'enemy' ? battle.enemy : battle.player;
+    defender.princessDead[t.lane] = true;
+  }
+  battle.banners.push({ text: t.side === 'enemy' ? 'ENEMY TOWER DESTROYED!' : 'YOUR TOWER DESTROYED!', t:0, dur:2.2, color: t.side === 'enemy' ? '#8ee6ff' : '#ff8080' });
+  // fire explosion at the fallen tower + crown popup + short burning rubble
+  const frS = FRAMES.SpellFireball;
+  if (frS && frS.attack.length) battle.effects.push({ type:'explosion', x:t.x, y:t.y-8, t:0, dur: Math.max(0.5, frS.attack.length/14) });
+  if (frS && frS.attack.length) battle.effects.push({ type:'rubbleFire', x:t.x, y:t.y-(t.kind==='king'?24:20), t:0, dur:3.5 });
+  battle.effects.push({ type:'crown', x:t.x, y:t.y-40, t:0, dur:2.4 });
+  SFX.towerDown();
+  // sudden death: first crown wins
+  if (battle.overtime && (battle.player.crowns !== battle.enemy.crowns)) endBattle();
+  if (t.kind === 'king') endBattle();
+}
+
+/* ---------------- projectiles ---------------- */
+function projUpdate(p, dt){
+  p.animT += dt;
+  if (p.type === 'spellArrow'){
+    if (p.delay > 0){ p.delay -= dt; return; }          // staggered volley
+    const dx = p.tx - p.x, dy = p.ty - p.y, d = Math.hypot(dx,dy);
+    const step = p.speed * dt;
+    if (d <= step){
+      p.x = p.tx; p.y = p.ty; p.done = true;
+      if (!p.volley.hit){                               // first arrow down: damage + 10 arrows stuck in the ground
+        p.volley.hit = true;
+        SFX.play('spell_arrows_hit', 0.75);
+        areaDamage(p.side, p.tx, p.ty, p.radius, p.dmg, p.towerFactor);
+        for (let i = 0; i < 10; i++){
+          const a2 = Math.random()*Math.PI*2, r2 = Math.random()*p.radius*0.9;
+          battle.effects.push({ type:'arrowStuck', x:p.tx+Math.cos(a2)*r2, y:p.ty+Math.sin(a2)*r2*0.8,
+            rot: Math.random()*Math.PI*2, t:0, dur:2.5 });
+        }
+      }
+    } else {
+      p.x += dx/d*step; p.y += dy/d*step;
+    }
+    return;
+  }
+  let tx, ty;
+  if (p.type === 'spellFireball'){ tx = p.tx; ty = p.ty; }
+  else { if (!p.target || p.target.dead || p.target.hp <= 0){ p.done = true; return; } tx = p.target.x; ty = p.target.y - 6; }
+  const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx,dy);
+  const step = p.speed * dt;
+  if (d <= step){
+    p.x = tx; p.y = ty; p.done = true;
+    if (p.type === 'spellFireball'){
+      battle.effects.push({ type:'explosion', x:p.x, y:p.y, t:0, dur: FRAMES.SpellFireball.attack.length/14 });
+      SFX.play('spell_fireball_hit', 0.8);
+      areaDamage(p.side, p.x, p.y, p.radius, p.dmg, p.towerFactor);
+    } else {
+      if (p.splash) areaDamage(p.side, p.x, p.y, p.splash, p.dmg, 1);
+      else dealDamage(p.target, p.dmg, p.side);
+    }
+  } else {
+    p.x += dx/d*step; p.y += dy/d*step;
+  }
+}
+function areaDamage(fromSide, x, y, radius, dmg, towerFactor){
+  for (const u of enemiesOf(fromSide)){
+    const d = dist({x,y}, u);
+    if (d <= radius + u.radius){
+      if (u.kind || u.building) dealDamage(u, dmg * (towerFactor||1), fromSide);
+      else dealDamage(u, dmg, fromSide);
+    }
+  }
+  // towers included
+  for (const t of battle.towers){
+    if (t.side === fromSide || t.dead) continue;
+    if (dist({x,y}, t) <= radius + t.radius) dealDamage(t, dmg*(towerFactor||1), fromSide);
+  }
+}
+
+/* ---------------- AI ---------------- */
+function makeAI(diff, arena){
+  const cfg = {
+    easy:   { interval:[2.4,3.6], skipChance:0.45, defendChance:0.8,  spellIQ:0, pushElixir:8, defendElixir:0 },
+    medium: { interval:[1.6,2.6], skipChance:0.2,  defendChance:1.0,  spellIQ:1, pushElixir:7, defendElixir:0 },
+    hard:   { interval:[0.9,1.7], skipChance:0.05, defendChance:1.0,  spellIQ:2, pushElixir:6, defendElixir:0 },
+  }[diff];
+  // Bone Pit (arena 1) is the baseline; lower arenas are noticeably weaker,
+  // higher arenas steadily sharper — so the AI grows with every promotion
+  const a = Math.max(0, Math.min(4, arena || 0));
+  const delta = a - 1;
+  cfg.interval = [cfg.interval[0]*(1-0.09*delta), cfg.interval[1]*(1-0.09*delta)];
+  cfg.skipChance = Math.max(0, Math.min(0.85, cfg.skipChance + 0.1*(-delta)));
+  cfg.pushElixir = Math.max(4, Math.min(10, cfg.pushElixir - delta));
+  cfg.spellIQ = Math.min(2, cfg.spellIQ + (a >= 3 ? 1 : 0));
+  cfg.defendChance = Math.max(0.5, Math.min(1, cfg.defendChance - 0.08*(-delta)));
+  return { cfg, timer: 2.5, lock: {} };
+}
+
+function enemyFieldHas(cardKey){
+  return battle.units.some(u => u.side==='enemy' && !u.dead && u.cardKey === cardKey);
+}
+function aiSpend(opt, x, y){
+  if (!enemyDeploy(opt.k, x, y)) return false;
+  const ai = battle.ai;
+  // after playing a card, it's locked until the AI has played 4 more cards
+  ai.lock[opt.k] = 4;
+  for (const k in ai.lock){ if (k !== opt.k && ai.lock[k] > 0) ai.lock[k]--; }
+  cycleCard(battle.enemy, opt.i);   // draw the next card from its deck like the player does
+  return true;
+}
+
+function aiThink(dt){
+  const ai = battle.ai, b = battle;
+  ai.timer -= dt;  if (ai.timer > 0) return;
+  const c = ai.cfg;
+  ai.timer = c.interval[0] + Math.random()*(c.interval[1]-c.interval[0]);
+  if (Math.random() < c.skipChance) return;
+
+  const e = b.enemy;
+  let affordable = e.hand.map((k,i)=>({k,i,c:CARDS[k]})).filter(o => o.c.cost <= e.elixir);
+  // one copy of each troop/building at a time + no instant re-play of the last card
+  affordable = affordable.filter(o =>
+    !enemyFieldHas(o.k) && !(ai.lock[o.k] > 0));
+  if (!affordable.length) return;
+
+  // threats: player units on enemy side or crossing
+  const threats = b.units.filter(u => u.side==='player' && !u.dead && !u.building && u.y < RIVER_Y + 40);
+  threats.sort((a,b2)=>a.y - b2.y);
+
+  // spell logic
+  if (c.spellIQ > 0){
+    const spells = affordable.filter(o => o.c.spell);
+    for (const sp of spells){
+      const groups = clusterPlayerUnits(sp.c.radius);
+      let target = null;
+      for (const g of groups){
+        const value = g.units.reduce((s,u)=>s+ (u.hp + u.dmg*8), 0);
+        if (g.units.length >= 3 || (c.spellIQ >= 2 && value > 900)) { target = g; break; }
+      }
+      if (target){ aiSpend(sp, target.x, target.y); return; }
+    }
+  }
+
+  // defense first: react to any player push
+  if (threats.length && Math.random() < c.defendChance){
+    const th = threats[0];
+    const many = threats.length >= 3;
+    const bigHp = threats.some(u => u.hp > 1200);
+    const air = threats.some(u => u.flying);
+    let pick = null;
+    const troopOpts = affordable.filter(o => !o.c.spell && !o.c.building);
+    if (air) pick = troopOpts.find(o => o.c.targets === 'any') || troopOpts.find(o=>o.c.count>=2);
+    else if (many) pick = troopOpts.find(o => o.c.splash) || troopOpts.find(o => o.c.count >= 3) || troopOpts.find(o => o.c.cost <= 3);
+    else if (bigHp) pick = troopOpts.find(o => o.k==='minipekka') || troopOpts.find(o => o.c.dmg >= 80);
+    if (!pick) pick = troopOpts[(Math.random()*troopOpts.length)|0];
+    if (pick){
+      // place defensively: behind the threatened tower, between it and the threat
+      const towers = b.towers.filter(t => t.side==='enemy' && !t.dead);
+      towers.sort((a,b2)=>dist(a,th)-dist(b2,th));
+      const tw = towers[0];
+      const px = tw ? tw.x + Math.sign(th.x - tw.x || 1)*24 : th.x;
+      const py = tw ? Math.max(148, Math.min(240, tw.y + 48)) : Math.max(150, Math.min(230, th.y - 30));
+      if (deployValid(pick.k, px, py, 'enemy')){ aiSpend(pick, px, py); return; }
+      if (deployValid(pick.k, th.x, 200, 'enemy')){ aiSpend(pick, th.x, 200); return; }
+    }
+    return; // defending — save remaining elixir, no simultaneous push
+  }
+
+  // player has nothing down (or defense roll skipped): attack
+  // if the AI lost a princess tower it counter-pushes sooner instead of giving up
+  const lostPrincess = b.towers.some(t => t.side==='enemy' && t.kind==='princess' && t.dead);
+  const pushNeed = lostPrincess ? Math.max(4, c.pushElixir - 3) : c.pushElixir;
+  const wantsPush = e.elixir >= pushNeed ||
+    (affordable.some(o=>o.k==='golem'||o.k==='giant') && e.elixir >= CARDS.giant.cost + 2);
+  if (wantsPush){
+    const tank = affordable.find(o => o.k==='golem') || affordable.find(o => o.k==='giant');
+    const lane = lostPrincess
+      ? (b.towers[1].dead ? BRIDGE_L : (b.towers[2].dead ? BRIDGE_R : (Math.random()<0.5?BRIDGE_L:BRIDGE_R)))
+      : (Math.random() < 0.5 ? BRIDGE_L : BRIDGE_R);
+    if (tank){ aiSpend(tank, lane + (Math.random()*24-12), 190 + Math.random()*30); return; }
+    const troop = affordable.filter(o=>!o.c.spell)[0];
+    if (troop){ aiSpend(troop, lane + (Math.random()*40-20), 205); return; }
+  }
+  // otherwise bank elixir like a real player — no free dumps
+}
+
+function clusterPlayerUnits(radius){
+  const units = battle.units.filter(u => u.side==='player' && !u.dead && !u.building);
+  const groups = [];
+  for (const u of units){
+    let g = groups.find(g => Math.hypot(g.x-u.x, g.y-u.y) < radius);
+    if (!g){ g = { x:u.x, y:u.y, units:[] }; groups.push(g); }
+    g.units.push(u);
+  }
+  groups.forEach(g => { g.x = g.units.reduce((s,u)=>s+u.x,0)/g.units.length; g.y = g.units.reduce((s,u)=>s+u.y,0)/g.units.length; });
+  return groups;
+}
+
+/* ---------------- battle update ---------------- */
+function updateBattle(dt){
+  const b = battle;
+  if (b.over) return;
+  if (b.startBannerT > 0){ b.startBannerT -= dt; }
+
+  // pending placement (held when at most 1 elixir short) auto-places once elixir is enough
+  if (b.pendingPlace){
+    const p = b.pendingPlace;
+    if (b.selected < 0){ b.pendingPlace = null; }     // user cancelled meanwhile
+    else if (b.player.elixir >= CARDS[p.key].cost){
+      const idx = b.player.hand.indexOf(p.key);
+      if (idx >= 0 && playerDeploy(p.key, p.x, p.y)){
+        cycleCard(b.player, idx);
+        b.selected = -1; b.pointerPos = null; dragInfo = null; b.pendingPlace = null;
+        renderHand();
+      } else {
+        b.pendingPlace = null;
+      }
+    }
+  }
+
+  // timer
+  b.time -= dt;
+  if (!b.overtime && b.time <= 60 && !b.doubleElixir){
+    b.doubleElixir = true; b.doubleBannerT = 2.6;
+  }
+  if (b.time <= 0){
+    if (!b.overtime){
+      if (b.player.crowns !== b.enemy.crowns){ endBattle(); return; }
+      b.overtime = true; b.time = OVERTIME;
+      b.banners.push({ text:'SUDDEN DEATH — FIRST CROWN WINS!', t:0, dur:2.6, color:'#ffd45a' });
+      if (!b.doubleElixir){ b.doubleElixir = true; b.doubleBannerT = 2.6; }
+    } else { endBattle(); return; }
+  }
+
+  // elixir
+  const rate = ELIXIR_RATE * (b.doubleElixir ? 2 : 1);
+  b.player.elixir = Math.min(ELIXIR_MAX, b.player.elixir + rate*dt);
+  b.enemy.elixir = Math.min(ELIXIR_MAX, b.enemy.elixir + rate*dt);
+  if (b.doubleBannerT > 0) b.doubleBannerT -= dt;
+
+  // towers
+  for (const t of b.towers){
+    if (t.dead) continue;
+    t.cd -= dt;
+    if (!t.active) continue;
+    if (t.cd <= 0){
+      // shoot nearest enemy unit in range
+      let best = null, bestD = 1e9;
+      for (const u of enemiesOf(t.side)){
+        if (u.building) continue;
+        if (riverBlocked(t, u)) continue;
+        const d = dist(t,u) - u.radius;
+        if (d < bestD && d <= t.range){ best = u; bestD = d; }
+      }
+      if (best){
+        b.projectiles.push({ type:'unit', x:t.x, y:t.y-14, target:best, side:t.side, speed:300, dmg:t.dmg, splash:0, sprite: t.kind==='king' ? 'pjCanonball' : 'pjArrow' });
+        t.cd = t.hitSpeed;
+      }
+    }
+  }
+
+  // units
+  for (const u of b.units){
+    if (u.dead) continue;
+    if (u.spawnT > 0){ u.spawnT -= dt; continue; }
+    if (u.building && u.lifetime > 0){
+      u.lifetime -= dt;
+      u.hp -= (u.maxHp / 30) * dt;   // decays to zero over its lifetime
+      if (u.lifetime <= 0 || u.hp <= 0){ u.hp = 0; killUnit(u); continue; }
+    }
+    u.retargetT -= dt;
+    if (u.retargetT <= 0){
+      u.retargetT = 0.4 + Math.random()*0.2;
+      const tgt = u.target;
+      const valid = tgt && !tgt.dead && (tgt.hp === undefined || tgt.hp > 0);
+      if (!valid){ acquireTarget(u); }
+      else {
+        const reach = u.range + u.radius + (tgt.radius || 8);
+        const attacking = dist(u, tgt) <= reach;                        // in range — stay locked
+        const committed = u.buildingsOnly || !!(tgt.kind || tgt.building); // walking to a building
+        if (!attacking && !committed){
+          acquireTarget(u);                                             // free-walking: aggro nearby troops
+        } else if (!attacking && committed && !u.buildingsOnly){
+          // building-bound troops only get distracted by enemies right on top of them
+          const near = enemiesOf(u.side).find(f => !f.building && (!f.flying || u.targets === 'any') && dist(u, f) - f.radius < 40);
+          if (near) u.target = near;
+        }
+      }
+    }
+    moveUpdate(u, dt);
+    attackUpdate(u, dt);
+    u.animT += dt;
+  }
+  // light separation between allied ground units
+  const alive = b.units.filter(u=>!u.dead && !u.building && !u.flying);
+  for (let i = 0; i < alive.length; i++){
+    for (let j = i+1; j < alive.length; j++){
+      const a = alive[i], c = alive[j];
+      if (a.side !== c.side) continue;
+      const dx = c.x-a.x, dy = c.y-a.y, d = Math.hypot(dx,dy);
+      const min = a.radius + c.radius - 2;
+      if (d > 0 && d < min){
+        const push = (min-d)/2;
+        a.x -= dx/d*push*0.6; a.y -= dy/d*push*0.6;
+        c.x += dx/d*push*0.6; c.y += dy/d*push*0.6;
+      }
+    }
+  }
+  b.units = b.units.filter(u => !u.dead);
+
+  // projectiles
+  for (const p of b.projectiles) projUpdate(p, dt);
+  b.projectiles = b.projectiles.filter(p => !p.done);
+
+  // effects
+  for (const e of b.effects){
+    e.t += dt;
+    if (e.type === 'poison'){
+      e.tickT -= dt;
+      if (e.tickT <= 0){
+        e.tickT = 0.5;
+        areaDamage(e.side, e.x, e.y, e.r, e.dps*0.5, e.towerFactor);
+      }
+    }
+  }
+  b.effects = b.effects.filter(e => e.t < e.dur);
+  for (const bn of b.banners) bn.t += dt;
+  b.banners = b.banners.filter(bn => bn.t < bn.dur);
+
+  aiThink(dt);
+  updateHandAffordability();
+}
+
+function endBattle(){
+  if (battle.over) return;
+  battle.over = true;
+  let p = battle.player.crowns, e = battle.enemy.crowns;
+  if (p === e){
+    // real CR tiebreaker: the side whose weakest tower has the lowest HP% loses
+    const minPct = side => Math.min(...battle.towers.filter(t => t.side === side).map(t => t.hp / t.maxHp));
+    const mp = minPct('player'), me = minPct('enemy');
+    if (mp < me){ p = 0; e = 1; battle.banners.push({ text:'LOWEST TOWER HP LOSES!', t:0, dur:2.0, color:'#ffd45a' }); }
+    else if (me < mp){ p = 1; e = 0; battle.banners.push({ text:'LOWEST TOWER HP LOSES!', t:0, dur:2.0, color:'#ffd45a' }); }
+  }
+  battle.finalResult = p > e ? 'victory' : (p < e ? 'defeat' : 'draw');
+  setTimeout(showResult, 900);
+}
+
+function showResult(){
+  if (battle.resultShown) return;
+  battle.resultShown = true;
+  const r = battle.finalResult;
+  ui.resultImg.src = IMG[r === 'victory' ? 'endVictory' : r === 'defeat' ? 'endDefeat' : 'endDraw'].src;
+  ui.resultCrowns.textContent = `Crowns  ${battle.player.crowns} — ${battle.enemy.crowns}`;
+  // trophies: win +30, draw +5, loss -15 (never below 0)
+  const delta = r === 'victory' ? 30 : r === 'defeat' ? -15 : 5;
+  const beforeArena = arenaIndex();
+  G.trophies = Math.max(0, G.trophies + delta);
+  saveTrophies();
+  const sign = delta >= 0 ? '+' : '';
+  const newArena = arenaIndex() > beforeArena ? `  •  NEW ARENA: ${ARENAS[arenaIndex()].name}!` : '';
+  ui.resultTrophies.textContent = `Trophies  ${G.trophies}  (${sign}${delta})${newArena}`;
+  showScreen('screen-result');
+  SFX.stopBattle();
+  if (r === 'victory') SFX.win(); else SFX.lose();
+}
+
+/* ---------------- rendering ---------------- */
+const canvas = ui.gameCanvas;
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high';
+
+function snapTile(p){
+  // half-tile grid: tile centers AND midpoints between them, clamped so the
+  // outer half-tile ring stays unplaceable (zone boundary unchanged)
+  const hs = TILE / 2;
+  let x = Math.round((p.x - TILE/2) / hs) * hs + TILE/2;
+  let y = Math.round((p.y - TILE/2) / hs) * hs + TILE/2;
+  x = Math.max(FIELD.x0 + TILE/2, Math.min(FIELD.x1 - TILE/2, x));
+  y = Math.max(FIELD.y0 + TILE/2, Math.min(FIELD.y1 - TILE/2, y));
+  return { x, y };
+}
+
+function draw(){
+  const b = battle;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,CW,CH);
+  ctx.fillStyle = '#0a1a33'; ctx.fillRect(0,0,CW,CH);
+  // world transform: uniform scale to fill canvas height, crop sides
+  ctx.setTransform(VS,0,0,VS,VXOFF,0);
+  // battle arena stays the classic grass field — arena art is menu-only
+  ctx.drawImage(IMG.bgGame, 0, 0, W, H);
+
+  // deploy zone overlay while dragging
+  const selKey = (b.selected >= 0) ? b.player.hand[b.selected] : null;
+  if (selKey){
+    const card = CARDS[selKey];
+    ctx.save();
+    if (!card.spell){
+      // zone fill
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(FIELD.x0, RIVER_Y+12, FIELD.x1-FIELD.x0, FIELD.y1-(RIVER_Y+12));
+      if (b.towers[1].dead) ctx.fillRect(FIELD.x0, 195, 176, RIVER_Y+12-195);
+      if (b.towers[2].dead) ctx.fillRect(200, 195, FIELD.x1-200, RIVER_Y+12-195);
+      // CR-style tile grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let gx = Math.ceil(FIELD.x0/TILE); gx*TILE <= FIELD.x1; gx++){ const x = gx*TILE; ctx.moveTo(x, RIVER_Y+12); ctx.lineTo(x, FIELD.y1); }
+      for (let gy = Math.ceil((RIVER_Y+12)/TILE); gy*TILE <= FIELD.y1; gy++){ const y = gy*TILE; ctx.moveTo(FIELD.x0, y); ctx.lineTo(FIELD.x1, y); }
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2;
+      ctx.strokeRect(FIELD.x0, RIVER_Y+12, FIELD.x1-FIELD.x0, FIELD.y1-(RIVER_Y+12));
+    } else {
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.setLineDash([6,6]);
+      ctx.strokeRect(12,40,376,545);
+    }
+    ctx.restore();
+  }
+
+  // spell target circle while dragging spell (snapped to grid like troops)
+  if (selKey && b.pointerPos){
+    if (CARDS[selKey].spell){
+      const sp = snapTile(b.pointerPos);
+      const r = CARDS[selKey].radius;
+      ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI*2);
+      ctx.fillStyle = selKey==='poison' ? 'rgba(160,60,200,0.25)' : 'rgba(255,120,50,0.25)';
+      ctx.fill(); ctx.strokeStyle = selKey==='poison' ? 'rgba(220,120,255,0.8)' : 'rgba(255,160,80,0.9)';
+      ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+
+  // effects below units (spawn rings)
+  for (const e of b.effects){
+    if (e.type === 'spawn'){
+      const pr = e.t/e.dur;
+      ctx.beginPath(); ctx.arc(e.x, e.y, 6+pr*22, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(255,255,255,${0.7*(1-pr)})`; ctx.lineWidth = 2.5; ctx.stroke();
+    }
+  }
+
+  // units
+  const units = b.units.slice().sort((a,c)=>a.y-c.y);
+  for (const u of units){
+    // shadow (hidden for cards flagged noShadow)
+    if (!u.noShadow){
+      ctx.beginPath();
+      ctx.ellipse(u.x, u.y + u.radius*0.55, u.radius*0.9, u.radius*0.38, 0, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
+    }
+    // side ring
+    ctx.beginPath(); ctx.arc(u.x, u.y + u.radius*0.55, u.radius*0.55, 0, Math.PI*2);
+    ctx.fillStyle = u.side==='player' ? 'rgba(70,140,255,0.55)' : 'rgba(255,70,70,0.55)'; ctx.fill();
+
+    const fr = FRAMES[u.sprite];
+    let img = null, rotateSpr = false;
+    if (fr){
+      const apick = animSet(fr, 'attack', u);
+      const kind = (u.attackAnimT >= 0 && apick.set && apick.set.length) ? 'attack' : 'move';
+      const pick = kind === 'attack' ? apick : animSet(fr, 'move', u);
+      rotateSpr = !!pick.rotate;
+      const set = pick.set;
+      if (set && set.length){
+        const fi = kind === 'attack'
+          ? Math.min(set.length-1, Math.floor(u.attackAnimT / u.attackAnimDur * set.length))
+          : Math.floor(u.walkDist / 6) % set.length;
+        img = set[fi];
+      }
+    }
+    if (u.building && IMG.cannonBase && IMG.cannonBarrel){
+      // cannon: static base + barrel that rotates toward the target
+      const bs = 46;
+      if (u.spawnT > 0) ctx.globalAlpha = 0.5 + 0.5*Math.sin(u.spawnT*30);
+      ctx.drawImage(IMG.cannonBase, u.x-bs/2, u.y-bs/2, bs, bs);
+      ctx.save();
+      ctx.translate(u.x, u.y - 4);
+      ctx.rotate(u.aimAng + Math.PI/2);
+      ctx.drawImage(IMG.cannonBarrel, -17, -19, 34, 34);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      if (u.hp < u.maxHp) drawBar(u.x, u.y - 30, 26, u.hp/u.maxHp, u.side);
+      continue;
+    }
+    const scale = u.scale || 1.3;
+    // The exported CR atlas cells have transparent padding around the Knight.
+    // Scale its visible pixels to match the older 35px Knight frames.
+    const knightCR = !!(fr && fr.knightCR);
+    const k = img ? (35 * scale * (knightCR ? 0.85 : 1)) / img.height : scale;
+    const dw = (img ? img.width : 30) * k, dh = (img ? img.height : 30) * k;
+    const spriteY = u.y - (knightCR ? 4 * scale / 1.3 : 0);
+    if (img){
+      if (rotateSpr){
+        // no dedicated side art: rotate the opposite-facing frame 180 degrees
+        ctx.save(); ctx.translate(u.x, spriteY); ctx.rotate(Math.PI);
+        ctx.drawImage(img, -dw/2, -dh/2, dw, dh);
+        ctx.restore();
+      } else {
+        if (knightCR){
+          // Mirror the supplied Knight atlas to match this game's battlefield directions.
+          ctx.save(); ctx.translate(u.x, spriteY); ctx.scale(-1, 1);
+          ctx.drawImage(img, -dw/2, -dh/2, dw, dh); ctx.restore();
+        } else {
+          ctx.drawImage(img, u.x-dw/2, spriteY-dh/2, dw, dh);
+        }
+      }
+      if (u.spawnT > 0 && IMG.clock){
+        // deploy timer: small clock floating above the troop, shrinking away as deploy ends
+        const cs = (u.spawnT < 0.35 ? u.spawnT/0.35 : 1) * 20;
+        ctx.drawImage(IMG.clock, u.x-cs/2, u.y-cs/2-26, cs, cs);
+      }
+    }
+    if (u.hp < u.maxHp) drawBar(u.x, u.y - dh/2 - 8, Math.max(20, dw*0.55), u.hp/u.maxHp, u.side);
+  }
+
+  // towers on a layer ABOVE units so sprites never overlap them
+  const towersSorted = b.towers.slice().sort((a,c)=>(a.dead?0:1)-(c.dead?0:1));
+  for (const t of towersSorted){
+    if (t.dead){
+      const rh = t.kind==='king' ? 48 : 41, rw = 60;
+      if (IMG.towerDestroyed) ctx.drawImage(IMG.towerDestroyed, t.x-rw/2, t.y-rh/2, rw, rh);
+      continue;
+    }
+    const upKey = (t.kind==='king' ? 'towerUpKing' : 'towerUpPrincess') + (t.side==='player' ? 'Blue' : '');
+    ctx.drawImage(IMG[upKey], t.x-30, t.y-30, 60, t.kind==='king'?63:51);
+    drawBar(t.x, t.y - (t.kind==='king'?38:34), 30, t.hp/t.maxHp, t.side);
+    // tower HP number
+    ctx.font = 'bold 9px Trebuchet MS, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    const hpTxt = String(Math.max(0, Math.ceil(t.hp)));
+    const numY = t.y - (t.kind==='king'?44:40);
+    ctx.strokeText(hpTxt, t.x, numY); ctx.fillText(hpTxt, t.x, numY);
+  }
+
+  // projectiles
+  for (const p of b.projectiles){
+    if (p.type === 'spellFireball'){
+      const fr = FRAMES.SpellFireball;
+      if (fr && fr.move.length){
+        const fi = Math.floor(p.animT*14) % fr.move.length;
+        ctx.drawImage(fr.move[fi], p.x-22, p.y-22, 44, 44);
+      }
+    } else if (p.type === 'spellArrow'){
+      if (p.delay > 0) continue;
+      const fr = FRAMES.SpellArrows;
+      if (fr && fr.attack.length){
+        // raw export plays right-to-left in reverse order — run the frames backwards
+        const seq = fr.attack;
+        const fi = (seq.length-1) - (Math.floor(p.animT*16) % seq.length);
+        const img = seq[fi];
+        // sprite's native nose direction is down-left (135deg); rotate to match velocity
+        const ang = Math.atan2(p.ty-p.y, p.tx-p.x) - 3*Math.PI/4;
+        const fk = 34/img.width;                 // cropped arrow ~37px long -> 34 world px (in air)
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+        ctx.drawImage(img, -img.width*fk/2, -img.height*fk/2, img.width*fk, img.height*fk);
+        ctx.restore();
+      }
+    } else {
+      const img = IMG[p.sprite] || IMG.pjArrow;
+      const tx = p.target ? p.target.x : p.x, ty = p.target ? p.target.y : p.y;
+      const ang = Math.atan2(ty-p.y, tx-p.x);
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(ang);
+      ctx.drawImage(img, -img.width*0.9, -img.height*0.9, img.width*1.8, img.height*1.8);
+      ctx.restore();
+    }
+  }
+
+  // poison clouds + explosions
+  for (const e of b.effects){
+    if (e.type === 'poison'){
+      const fr = FRAMES.SpellPoison;
+      if (fr && fr.attack.length){
+        const fi = Math.floor(e.t*10) % fr.attack.length;
+        ctx.globalAlpha = 0.85;
+        ctx.drawImage(fr.attack[fi], e.x-e.r*1.15, e.y-e.r*1.15, e.r*2.3, e.r*2.3);
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2); ctx.fillStyle='rgba(150,60,190,0.4)'; ctx.fill();
+      }
+    } else if (e.type === 'explosion'){
+      const fr = FRAMES.SpellFireball;
+      if (fr && fr.attack.length){
+        const fi = Math.min(fr.attack.length-1, Math.floor(e.t/e.dur * fr.attack.length));
+        ctx.drawImage(fr.attack[fi], e.x-40, e.y-40, 80, 80);
+      }
+    } else if (e.type === 'rubbleFire'){
+      const fr = FRAMES.SpellFireball;
+      if (fr && fr.attack.length){
+        const fi = Math.min(fr.attack.length-1, Math.floor(e.t/e.dur * fr.attack.length * 2));
+        ctx.globalAlpha = e.t > e.dur - 1 ? Math.max(0, (e.dur - e.t)) : 0.85;
+        ctx.drawImage(fr.attack[fi], e.x-17, e.y-24, 34, 34);
+        ctx.globalAlpha = 1;
+      }
+    } else if (e.type === 'arrowStuck'){
+      const fr = FRAMES.SpellArrows;
+      if (fr && fr.attack.length){
+        // first sprite of the volley, random rotation, sticks in the ground then fades
+        const img = fr.attack[0];
+        const k = e.t / e.dur, fk = 26/img.width;
+        ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.rot);
+        ctx.globalAlpha = k > 0.7 ? Math.max(0, 1-(k-0.7)/0.3) : 0.95;
+        ctx.drawImage(img, -img.width*fk/2, -img.height*fk/2, img.width*fk, img.height*fk);
+        ctx.restore(); ctx.globalAlpha = 1;
+      }
+    } else if (e.type === 'crown'){
+      if (IMG.crown){
+        const HOLD = 0.6;   // wait a little at full size, then shrink away
+        const k = Math.max(0, Math.min(1, (e.t - HOLD) / (e.dur - HOLD)));
+        const cw = 30 * (1 - k);
+        if (cw > 0.5){
+          ctx.globalAlpha = 1 - k;
+          ctx.drawImage(IMG.crown, e.x-cw/2, e.y - k*20 - cw/2, cw, cw*IMG.crown.height/IMG.crown.width);
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+  }
+
+  // drop indicator (snapped to tile grid for troops)
+  // only show while the cursor is genuinely inside the grid — the snap clamp
+  // would otherwise pin the circle to the zone edge when hovering outside it
+  if (selKey && b.pointerPos){
+    const inGrid = b.pointerPos.x > FIELD.x0 && b.pointerPos.x < FIELD.x1 &&
+                   b.pointerPos.y > FIELD.y0 && b.pointerPos.y < FIELD.y1;
+    if (inGrid){
+      const pos = snapTile(b.pointerPos);
+      const ok = deployValid(selKey, pos.x, pos.y, 'player') && b.player.elixir >= CARDS[selKey].cost;
+      // faint gray tile with a lighter gray outline (red-tinted when blocked)
+      if (!CARDS[selKey].spell){
+        ctx.fillStyle = ok ? 'rgba(120,120,120,0.22)' : 'rgba(190,110,110,0.25)';
+        ctx.fillRect(pos.x-TILE/2, pos.y-TILE/2, TILE, TILE);
+        ctx.strokeStyle = ok ? 'rgba(210,210,210,0.55)' : 'rgba(255,125,125,0.45)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(pos.x-TILE/2, pos.y-TILE/2, TILE, TILE);
+      }
+      // deploy ghost: first walk sprite at 50% (troops) or target circle (spells)
+      if (!CARDS[selKey].spell){
+        const fr = FRAMES[CARDS[selKey].sprite];
+        // ghost faces the way the troop will march (player marches up-screen);
+        // variant sprites use their up set, flat sprites fall back to their move frames
+        const mvSet = (fr && fr.moveDir && fr.moveDir.up && fr.moveDir.up.length) ? fr.moveDir.up
+                    : (fr && fr.move && fr.move.length) ? fr.move : null;
+        const ghost = mvSet && mvSet[0];
+        if (ghost){
+          const gscale = CARDS[selKey].scale || 1.3;
+          const gk = (35 * gscale) / ghost.height;
+          const gw = ghost.width*gk, gh = ghost.height*gk;
+          ctx.globalAlpha = ok ? 0.5 : 0.35;
+          ctx.drawImage(ghost, pos.x-gw/2, pos.y-gh/2, gw, gh);
+          ctx.globalAlpha = 1;
+        }
+      } else {
+        ctx.beginPath(); ctx.arc(pos.x, pos.y, CARDS[selKey].radius || 14, 0, Math.PI*2);
+        ctx.fillStyle = ok ? 'rgba(255,255,255,0.10)' : 'rgba(230,70,70,0.20)';
+        ctx.fill(); ctx.lineWidth = 2;
+        ctx.strokeStyle = ok ? 'rgba(255,255,255,0.15)' : 'rgba(255,125,125,0.30)'; ctx.stroke();
+      }
+      // troop/spell name above the ghost
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.strokeText(CARDS[selKey].label, pos.x, pos.y - 30);
+      ctx.fillStyle = ok ? '#ffffff' : '#ff9c9c';
+      ctx.fillText(CARDS[selKey].label, pos.x, pos.y - 30);
+      // elixir readout "have/cost" in purple with the drop icon beside it
+      const txt = `${Math.floor(b.player.elixir)}/${CARDS[selKey].cost}`;
+      ctx.font = 'bold 13px system-ui, sans-serif';
+      const tw = ctx.measureText(txt).width;
+      const iconS = 14, gap = 4, bx = pos.x + tw/2 + gap + iconS/2 - 6;
+      ctx.strokeText(txt, pos.x - 6, pos.y - 16);
+      ctx.fillStyle = '#c95cf0';                       // purple elixir text
+      ctx.fillText(txt, pos.x - 6, pos.y - 16);
+      if (IMG.elixirIcon) ctx.drawImage(IMG.elixirIcon, bx - iconS/2, pos.y - 16 - iconS + 2, iconS, iconS);
+    }
+  }
+
+  // ----- UI layer (canvas pixels, not world coords) -----
+  ctx.setTransform(1,0,0,1,0,0);
+  drawBanner('center');
+  if (b.startBannerT > 0) drawBanner('start');
+  if (b.doubleBannerT > 0 && IMG.doubleElixir){
+    const a = Math.min(1, b.doubleBannerT/0.5);
+    ctx.globalAlpha = a;
+    ctx.drawImage(IMG.doubleElixir, CW/2-110, 240, 220, 220*IMG.doubleElixir.height/IMG.doubleElixir.width);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBanner(mode){
+    let list = [];
+    if (mode==='center') list = b.banners;
+    else if (b.startBannerT > 0) list = [{ text:'BATTLE!', t: 2.0-b.startBannerT, dur:2.0, color:'#ffd45a' }];
+    for (const bn of list){
+      const a = bn.t < 0.25 ? bn.t/0.25 : (bn.t > bn.dur-0.4 ? (bn.dur-bn.t)/0.4 : 1);
+      ctx.globalAlpha = Math.max(0,a);
+      ctx.font = 'bold 17px Trebuchet MS, sans-serif';
+      ctx.textAlign='center';
+      const w = ctx.measureText(bn.text).width + 28;
+      ctx.fillStyle = 'rgba(8,14,30,0.82)';
+      roundRect(CW/2-w/2, 310, w, 30, 15); ctx.fill();
+      ctx.strokeStyle = bn.color; ctx.lineWidth = 1.5; roundRect(CW/2-w/2, 310, w, 30, 15); ctx.stroke();
+      ctx.fillStyle = bn.color; ctx.fillText(bn.text, CW/2, 330);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function drawBar(x, y, w, frac, side){
+  frac = Math.max(0, Math.min(1, frac));
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillRect(x-w/2-1, y-1, w+2, 6);
+  ctx.fillStyle = side==='player' ? '#54e04a' : '#ff4a4a';
+  ctx.fillRect(x-w/2, y, w*frac, 4);
+}
+
+/* ---------------- hand UI ---------------- */
+function renderHand(){
+  const b = battle;
+  ui.handRow.innerHTML = '';
+  b.player.hand.forEach((k,i) => {
+    const card = CARDS[k];
+    const el = document.createElement('div');
+    el.className = 'hand-card';
+    el.style.backgroundImage = `url('${IMG['card_'+k].src}')`;
+    el.innerHTML = `<span class="cost">${card.cost}</span>`;
+    el.dataset.idx = i;
+    ui.handRow.appendChild(el);
+  });
+  ui.nextCard.style.backgroundImage = `url('${IMG['card_'+b.player.next].src}')`;
+  updateHandAffordability();
+}
+function updateHandAffordability(){
+  if (!battle) return;
+  [...ui.handRow.children].forEach((el,i) => {
+    const k = battle.player.hand[i]; if (!k) return;
+    el.classList.toggle('unaffordable', battle.player.elixir < CARDS[k].cost);
+    el.classList.toggle('selected', battle.selected === i);
+  });
+  ui.elixirFill.style.width = (battle.player.elixir/ELIXIR_MAX*100)+'%';
+  ui.elixirNum.textContent = Math.floor(battle.player.elixir);
+  ui.elixirBar.classList.toggle('full', battle.player.elixir >= ELIXIR_MAX - 0.01);
+}
+
+/* ---------------- input ---------------- */
+let canvasRect = null;
+function refreshCanvasRect(){ canvasRect = canvas.getBoundingClientRect(); }
+window.addEventListener('resize', refreshCanvasRect);
+function canvasPos(ev){
+  if (!canvasRect || !canvasRect.width) refreshCanvasRect();   // cached: per-move getBoundingClientRect forces layout jank
+  const r = canvasRect;
+  const cx = (ev.clientX - r.left) / r.width * CW;     // canvas px
+  const cy = (ev.clientY - r.top) / r.height * CH;
+  return { x: (cx - VXOFF) / VS, y: cy / VS };        // invert world transform
+}
+let dragInfo = null; // { idx, x0, y0, moved }
+
+function tryDeployAt(pos){
+  const b = battle;
+  const k = b.player.hand[b.selected];
+  const p = snapTile(pos);
+  if (playerDeploy(k, p.x, p.y)){
+    cycleCard(b.player, b.selected);
+    b.selected = -1; b.pointerPos = null; dragInfo = null; b.pendingPlace = null;
+    renderHand();
+    return true;
+  }
+  if (deployValid(k, p.x, p.y, 'player')){
+    const short = CARDS[k].cost - b.player.elixir;
+    if (short <= 1){
+      // at most 1 elixir short: hold the placement here until elixir fills up, then auto-place
+      b.pendingPlace = { key: k, x: p.x, y: p.y };
+      b.pointerPos = p;
+      return true;
+    }
+    toast('Not enough elixir!');
+  } else {
+    toast("You can't deploy there!");
+  }
+  b.selected = -1; b.pointerPos = null; dragInfo = null; b.pendingPlace = null;
+  renderHand();
+  return false;
+}
+
+ui.handRow.addEventListener('pointerdown', ev => {
+  const el = ev.target.closest('.hand-card');
+  if (!el || !battle || battle.over) return;
+  ev.preventDefault();
+  const idx = +el.dataset.idx;
+  const k = battle.player.hand[idx];
+  if (battle.selected === idx){
+    // tap the selected card again to deselect — springs back down
+    battle.selected = -1; battle.pointerPos = null; dragInfo = null; battle.pendingPlace = null;
+    el.classList.add('settle');
+    setTimeout(()=>el.classList.remove('settle'), 260);
+    updateHandAffordability();
+    return;
+  }
+  // selecting is always allowed, even without elixir — placement gets
+  // rejected on release (or held as pending when at most 1 short)
+  battle.selected = idx;
+  dragInfo = { idx, x0: ev.clientX, y0: ev.clientY, moved: false };
+  battle.pointerPos = null; battle.pendingPlace = null;
+  updateHandAffordability();
+});
+window.addEventListener('pointermove', ev => {
+  if (!battle || battle.over) return;
+  if (battle.selected < 0) return;
+  if (dragInfo && (Math.abs(ev.clientX-dragInfo.x0) > 10 || Math.abs(ev.clientY-dragInfo.y0) > 10)) dragInfo.moved = true;
+  // ghost preview only shows while actively pressing on the grid (or when a
+  // placement is pending on elixir) — plain hover-dragging shows nothing
+  if (ev.buttons > 0 && ev.target === canvas) battle.pointerPos = canvasPos(ev);
+  else if (!battle.pendingPlace) battle.pointerPos = null;
+});
+window.addEventListener('pointerup', ev => {
+  if (!battle || battle.over) return;
+  if (battle.selected < 0) return;
+  refreshCanvasRect();                                // one layout flush per release is fine
+  // only place if the cursor is actually on the grid (canvas) at release —
+  // releasing over the hand, elixir bar, or any UI keeps the card selected
+  const under = document.elementFromPoint(ev.clientX, ev.clientY);
+  if (under === canvas){
+    const p = canvasPos(ev);
+    // and inside the grid area itself — releases on the margin/grass don't place
+    if (p.x > FIELD.x0 && p.x < FIELD.x1 && p.y > FIELD.y0 && p.y < FIELD.y1){
+      tryDeployAt(p);
+    }
+  }
+});
+canvas.addEventListener('pointerdown', ev => {
+  if (!battle || battle.over) return;
+  if (battle.selected < 0) return;
+  ev.preventDefault();
+  battle.pointerPos = canvasPos(ev);
+});
+window.addEventListener('keydown', ev => { if (ev.key === 'Escape' && battle){ battle.selected = -1; battle.pointerPos = null; dragInfo = null; battle.pendingPlace = null; updateHandAffordability(); } });
+
+/* ---------------- main loop ---------------- */
+let lastT = 0, rafId = 0;
+function loop(ts){
+  rafId = requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (ts - lastT)/1000 || 0.016);
+  lastT = ts;
+  if (!battle) return;
+  if (ui.screenBattle.classList.contains('hidden')) return;
+  updateBattle(dt);
+  draw();
+  updateTopBar();
+}
+function updateTopBar(){
+  const t = Math.max(0, Math.ceil(battle.time));
+  ui.timerLabel.textContent = `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`;
+  ui.timerLabel.classList.toggle('urgent', battle.time <= 10.5);
+  ui.phaseLabel.textContent = battle.overtime ? 'OVERTIME' : (battle.doubleElixir ? '2× ELIXIR' : '');
+  ui.playerCrowns.src = IMG['score'+Math.min(3,battle.player.crowns)].src;
+  ui.enemyCrowns.src = IMG['score'+Math.min(3,battle.enemy.crowns)].src;
+}
+
+/* ---------------- screens & wiring ---------------- */
+function wireUI(){
+  ui.screenTitle.addEventListener('click', () => { showScreen('screen-menu'); SFX.beep(); });
+  $('btnBattle').addEventListener('click', () => {
+    if (G.deck.length !== 8){ renderDeckScreen(); showScreen('screen-deck'); toast('Choose 8 cards first!'); return; }
+    startBattle();   // straight into the match — arena decides the AI difficulty
+  });
+  $('btnDeck').addEventListener('click', () => { renderDeckScreen(); showScreen('screen-deck'); });
+  $('btnHow').addEventListener('click', () => ui.howModal.classList.remove('hidden'));
+  $('btnHowClose').addEventListener('click', () => ui.howModal.classList.add('hidden'));
+  $('btnDeckBack').addEventListener('click', () => showScreen('screen-menu'));
+  $('btnDeckReset').addEventListener('click', () => { G.deck = DEFAULT_DECK.slice(); renderDeckScreen(); SFX.beep(); });
+  $('btnDeckSave').addEventListener('click', () => {
+    if (G.deck.length !== 8){ toast('Pick exactly 8 cards!'); return; }
+    localStorage.setItem('tcr_deck', JSON.stringify(G.deck));
+    toast('Deck saved!'); showScreen('screen-menu');
+  });
+  ['Easy','Medium','Hard'].forEach(d => {
+    $('btn'+d).addEventListener('click', () => {
+      G.difficulty = d.toLowerCase(); localStorage.setItem('tcr_diff', G.difficulty);
+      startBattle();
+    });
+  });
+  $('btnDiffBack').addEventListener('click', () => showScreen('screen-menu'));
+  $('btnQuit').addEventListener('click', () => { if (battle && !battle.over) ui.pauseModal.classList.remove('hidden'); });
+  const toggleFs = () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+    else document.documentElement.requestFullscreen().catch(()=>toast('Fullscreen blocked by browser'));
+  };
+  $('btnFs').addEventListener('click', toggleFs);
+  window.addEventListener('keydown', ev => { if (ev.key === 'f' || ev.key === 'F') toggleFs(); });
+  $('btnResume').addEventListener('click', () => ui.pauseModal.classList.add('hidden'));
+  $('btnQuitConfirm').addEventListener('click', () => {
+    ui.pauseModal.classList.add('hidden');
+    SFX.stopBattle();
+    battle = null; showScreen('screen-menu'); SFX.music();
+  });
+  $('btnAgain').addEventListener('click', () => startBattle());
+  $('btnMenu').addEventListener('click', () => { battle = null; showScreen('screen-menu'); SFX.music(); });
+}
+
+/* ---------------- boot ---------------- */
+function runIntro(onDone){
+  showScreen('screen-intro');
+  setTimeout(() => SFX.startup(), 100);                 // sound at 0.1s
+  // restart the Supercell pop/fade animation
+  const logo = ui.introLogo;
+  logo.style.animation = 'none'; void logo.offsetWidth; logo.style.animation = '';
+  setTimeout(onDone, 2600);                             // Supercell logo pop + fade
+}
+async function boot(){
+  wireUI();
+  wireDeckScroll();
+  wireDeckCardDrag();
+  $('btnRandom').addEventListener('click', () => {
+    const pool = ALL_CARD_KEYS.filter(k => !CARDS[k].unlockTrophies || G.trophies >= CARDS[k].unlockTrophies);
+    for (let i = pool.length-1; i > 0; i--){ const j = (Math.random()*(i+1))|0; [pool[i],pool[j]] = [pool[j],pool[i]]; }
+    G.deck = pool.slice(0,8);
+    renderDeckScreen(); SFX.beep(); toast('Random deck!');
+  });
+  // click sound on interactive elements (not blank space / canvas)
+  document.addEventListener('pointerdown', ev => {
+    if (ev.target.closest('button, .hand-card, .deck-card, .deck-slot, .modal-card')) SFX.click();
+  });
+  window.addEventListener('pointerdown', () => { SFX.retryStartup(); SFX.retryMusic(); });  // autoplay-blocked fallback
+  let introDone = false, assetsDone = false, loadingShown = false, loadShownAt = 0;
+  const proceed = () => {
+    if (!introDone) return;                             // intro still playing
+    if (!assetsDone){                                   // loading screen with real progress
+      loadingShown = true; loadShownAt = performance.now();
+      showScreen('screen-loading'); return;
+    }
+    if (!loadingShown){                                 // cached assets: still show the loading screen
+      loadingShown = true; loadShownAt = performance.now();
+      showScreen('screen-loading');
+    }
+    const wait = Math.max(0, 2000 - (performance.now() - loadShownAt));   // visible >= 2s
+    setTimeout(() => { showScreen('screen-menu'); SFX.music(); }, wait);
+  };
+  runIntro(() => { introDone = true; proceed(); });
+  const finishLoading = timedOut => {
+    if (assetsDone) return;
+    assetsDone = true;
+    if (timedOut) ui.loadStep.textContent = 'Some art took too long — continuing…';
+    proceed();
+  };
+  const loadWatchdog = setTimeout(() => finishLoading(true), 90000);
+  loadAllAssets().then(() => {
+    clearTimeout(loadWatchdog);
+    finishLoading(false);
+  }).catch(error => {
+    clearTimeout(loadWatchdog);
+    console.error('Crownfall asset loading failed:', error);
+    finishLoading(true);
+  });
+  rafId = requestAnimationFrame(loop);
+}
+boot();

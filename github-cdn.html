@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" data-theme="undertale-deltarune">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <title>Dill's Games</title>
+  <script>
+    window.GAME_LIBRARY_CATALOG = 'https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/games.json';
+    window.GAME_LIBRARY_CDN_MODE = true;
+    window.GAME_LIBRARY_CDN_ROOT = 'https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/';
+  </script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/styles.css?v=4">
+</head>
+<body>
+  <div class="theme-menu">
+    <button id="theme-toggle" class="theme-toggle" type="button" aria-haspopup="true" aria-expanded="false">THEMES</button>
+    <div id="theme-options" class="theme-options" role="menu" hidden>
+      <button type="button" role="menuitemradio" aria-checked="true" data-theme="undertale-deltarune">UNDERTALE + DELTARUNE</button>
+    </div>
+  </div>
+  <main class="shell">
+    <header class="masthead">
+      <h1>Dill's Games</h1>
+      <label class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search games..." autocomplete="off" aria-label="Search games"></label>
+    </header>
+    <section class="library" aria-label="Games"><div id="game-grid" class="game-grid"></div><p id="empty" class="empty" hidden>No games found.</p></section>
+    <button id="home-music-toggle" class="home-music-toggle" type="button" aria-label="Mute background music" title="Mute background music"><img src="https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/assets/mute-placeholder.svg" alt=""></button>
+  </main>
+
+  <section id="deltarune-screen" class="chapter-screen" aria-labelledby="chapter-title" hidden>
+    <header class="chapter-topbar"><button id="chapter-back" class="page-control" type="button"><img src="https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/assets/chapter-text/menu-back.png" alt="BACK"></button><h2 id="chapter-title"><img src="https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/assets/chapter-text/menu-deltarune.png" alt="DELTARUNE"></h2><button id="music-toggle" class="music-toggle" type="button" aria-label="Mute music" title="Mute music"><img src="https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/assets/mute-placeholder.svg" alt=""></button></header>
+    <div id="chapter-list" class="chapter-list"></div>
+  </section>
+  <section id="game-player" class="game-player" aria-label="Game player" hidden>
+    <header class="player-topbar"><button id="player-back" class="page-control" type="button">← BACK</button><h2 id="player-title">GAME</h2></header>
+    <iframe id="game-frame" title="Game" allow="autoplay; fullscreen; gamepad" referrerpolicy="no-referrer"></iframe>
+  </section>
+  <audio id="home-music" loop preload="none"></audio>
+  <audio id="deltarune-music" loop preload="none"></audio>
+  <dialog id="notice" class="notice-dialog"><button class="close" id="close-notice" aria-label="Close">×</button><p id="notice-copy"></p></dialog>
+  <script src="https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/config.js?v=4"></script>
+  <script src="https://cdn.jsdelivr.net/gh/purpleskulltrooper85-svg/toby-game-library@main/app.js?v=5"></script>
+</body>
+</html>

@@ -13,6 +13,7 @@ const gamePlayer = document.querySelector('#game-player');
 const gameFrame = document.querySelector('#game-frame');
 const playerTitle = document.querySelector('#player-title');
 let playerReturn = 'library';
+let gameLoadToken = 0;
 let isMusicMuted = false;
 let lastMoveSound = 0;
 const catalogUrl = window.GAME_LIBRARY_CATALOG || 'games.json';
@@ -98,6 +99,8 @@ function renderGames() {
 
 function showDeltarune(game) {
   homeMusic.pause();
+  gameLoadToken++;
+  gameFrame.removeAttribute('srcdoc');
   gameFrame.src = 'about:blank';
   gamePlayer.hidden = true;
   document.body.classList.add('chapters-open');
@@ -134,6 +137,7 @@ function showDeltarune(game) {
 
 function openGame(url, title, returnTo) {
   const pageUrl = assetUrl(url);
+  const loadToken = ++gameLoadToken;
   playerReturn = returnTo;
   playerTitle.textContent = title;
   homeMusic.pause();
@@ -141,11 +145,53 @@ function openGame(url, title, returnTo) {
   if (returnTo === 'chapters') chapterScreen.hidden = true;
   else document.body.classList.add('chapters-open');
   gamePlayer.hidden = false;
-  gameFrame.src = pageUrl;
+  gameFrame.removeAttribute('srcdoc');
+  if (window.GAME_LIBRARY_CDN_MODE) {
+    gameFrame.src = 'about:blank';
+    loadCdnGame(pageUrl, loadToken);
+  } else {
+    gameFrame.src = pageUrl;
+  }
   document.querySelector('#player-back').focus();
 }
 
+function prepareCdnGameHtml(html, pageUrl) {
+  const pageBase = new URL('.', pageUrl).href;
+  const repositoryBase = window.GAME_LIBRARY_CDN_ROOT || new URL('.', catalogBase()).href;
+  const existingBase = html.match(/<base\b[^>]*>/i);
+  let baseTag = existingBase?.[0] || `<base href="${escapeHtml(pageBase)}">`;
+
+  if (existingBase) {
+    baseTag = baseTag.replace(/\bhref\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i, `href="${escapeHtml(pageBase)}"`);
+    if (!/\bhref\s*=/i.test(baseTag)) baseTag = baseTag.replace(/\s*\/?>$/, ` href="${escapeHtml(pageBase)}">`);
+    html = html.replace(/<base\b[^>]*>/gi, '');
+  }
+
+  html = html
+    .replace(/new URL\(path,\s*window\.location\.href\)\.href/g, 'new URL(path, document.baseURI).href')
+    .replace(/new URL\(["']\.\/["'],\s*window\.location\.href\)\.href/g, JSON.stringify(pageBase))
+    .replace(/(["'`])\/files\//g, (_, quote) => `${quote}${repositoryBase}files/`);
+
+  if (/<head\b[^>]*>/i.test(html)) return html.replace(/<head\b[^>]*>/i, head => `${head}${baseTag}`);
+  return `<head>${baseTag}</head>${html}`;
+}
+
+async function loadCdnGame(pageUrl, loadToken) {
+  try {
+    const response = await fetch(pageUrl);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const html = await response.text();
+    if (loadToken !== gameLoadToken || gamePlayer.hidden) return;
+    gameFrame.srcdoc = prepareCdnGameHtml(html, pageUrl);
+  } catch (error) {
+    if (loadToken !== gameLoadToken || gamePlayer.hidden) return;
+    gameFrame.srcdoc = `<!doctype html><meta charset="utf-8"><body style="margin:0;padding:24px;background:#000;color:#fff;font:16px monospace"><h2>Game could not load</h2><p>${escapeHtml(error.message || error)}</p></body>`;
+  }
+}
+
 function returnFromGame() {
+  gameLoadToken++;
+  gameFrame.removeAttribute('srcdoc');
   gameFrame.src = 'about:blank';
   gamePlayer.hidden = true;
   if (playerReturn === 'chapters') {
@@ -160,6 +206,8 @@ function returnFromGame() {
 function leaveDeltarune() {
   music.pause();
   music.currentTime = 0;
+  gameLoadToken++;
+  gameFrame.removeAttribute('srcdoc');
   gameFrame.src = 'about:blank';
   gamePlayer.hidden = true;
   chapterScreen.hidden = true;
