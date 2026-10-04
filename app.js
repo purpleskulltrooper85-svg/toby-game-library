@@ -79,7 +79,10 @@ function renderGames() {
     card.className = 'game-card';
     card.type = 'button';
     card.setAttribute('aria-label', `Open ${game.title}`);
-    card.innerHTML = `<span class="card-art"><img class="cover" src="${escapeHtml(assetUrl(game.image))}" alt=""><span class="tag">NEW</span></span><span class="game-name">${escapeHtml(game.title)}</span>`;
+    const gameLabel = game.labelImage
+      ? `<img class="game-label-image" src="${escapeHtml(assetUrl(game.labelImage))}" alt="${escapeHtml(game.title)}">`
+      : escapeHtml(game.title);
+    card.innerHTML = `<span class="card-art"><img class="cover" src="${escapeHtml(assetUrl(game.image))}" alt=""><span class="tag">NEW</span></span><span class="game-name">${gameLabel}</span>`;
     card.addEventListener('pointerenter', () => sound('move'));
     card.addEventListener('focus', () => sound('move'));
     card.addEventListener('click', () => {
@@ -104,7 +107,10 @@ function showDeltarune(game) {
     row.type = 'button';
     row.className = 'chapter-row';
     row.disabled = Boolean(chapter.locked);
-    row.innerHTML = `<img class="chapter-number" src="assets/chapter-text/chapter-${chapter.number}.png" alt="Chapter ${chapter.number}"><span class="chapter-name"><img src="assets/chapter-text/chapter-name-${chapter.number}.png" alt="${escapeHtml(chapter.name)}"></span><span class="chapter-icon" aria-hidden="true">${escapeHtml(chapter.suit || '')}</span>`;
+    const icon = chapter.icon
+      ? `<img src="${escapeHtml(assetUrl(chapter.icon))}" alt="">`
+      : escapeHtml(chapter.suit || '');
+    row.innerHTML = `<img class="chapter-number" src="assets/chapter-text/chapter-${chapter.number}.png" alt="Chapter ${chapter.number}"><span class="chapter-name"><img src="assets/chapter-text/chapter-name-${chapter.number}.png" alt="${escapeHtml(chapter.name)}"></span><span class="chapter-icon${chapter.icon ? ' has-image' : ''}" aria-hidden="true">${icon}</span>`;
     row.addEventListener('pointerenter', () => sound('move'));
     row.addEventListener('focus', () => sound('move'));
     if (!chapter.locked) {

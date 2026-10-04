@@ -6,3 +6,18 @@
 .game-player{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;background:#000;height:100vh;height:100dvh;overflow:hidden}.game-player[hidden]{display:none}.player-topbar{flex:0 0 clamp(42px,8vh,54px);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:4px 10px;border-bottom:2px solid #fff}.player-topbar h2{grid-column:2;margin:0;text-align:center;font:12px MonsterFriend,"Courier New",monospace}.player-topbar .page-control{grid-column:1;grid-row:1}.game-player iframe{flex:1;min-height:0;width:100%;border:0;background:#000}
 dialog{color:#fff;background:#050505;border:2px solid white;width:min(420px,calc(100vw - 28px));padding:30px;text-align:center;font:13px ui-monospace,"Courier New",monospace}dialog::backdrop{background:#000b}.notice-dialog .close{position:absolute;right:8px;top:4px;font:28px Arial;background:transparent;color:white;border:0;cursor:pointer}.notice-dialog .close:hover{color:var(--accent)}
 @media(max-width:560px){.shell{padding:65px 15px 18px}.game-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 12px}.game-name{font-size:9px}.masthead{margin-bottom:25px}.theme-menu{right:14px;top:12px}.home-music-toggle{right:130px;top:12px}.chapter-screen{padding:6px 8px 8px}.chapter-topbar{flex-basis:clamp(36px,8vh,46px);grid-template-columns:minmax(72px,1fr) auto minmax(38px,1fr)}.chapter-topbar h2{font-size:13px}.chapter-row{grid-template-columns:minmax(104px,1fr) 1.2fr minmax(30px,38px);padding:0 5px}.chapter-number{max-width:112px}.chapter-icon{width:min(30px,7vh);height:min(30px,7vh);font-size:20px}}
+.game-name{min-height:48px;padding:7px 4px;}
+.game-label-image{display:block;width:auto;max-width:100%;height:auto;max-height:34px;object-fit:contain;image-rendering:pixelated;}
+.chapter-topbar,.chapter-list{width:min(1120px,calc(100vw - 48px));}
+.chapter-topbar{flex-basis:clamp(48px,8vh,72px);margin-bottom:clamp(5px,1.2vh,12px);}
+.chapter-topbar h2{line-height:0;}
+.chapter-topbar h2 img{display:block;width:min(300px,34vw);max-height:min(52px,7vh);object-fit:contain;image-rendering:pixelated;}
+.chapter-topbar .page-control{height:min(54px,8vh);min-width:86px;display:grid;place-items:center;padding:5px 10px;}
+.page-control img{display:block;max-width:100%;height:auto;max-height:min(36px,6vh);image-rendering:pixelated;}
+.chapter-row{grid-template-columns:minmax(0,1fr) minmax(0,1.35fr) minmax(64px,88px);padding:0 clamp(12px,2vw,28px);}
+.chapter-number,.chapter-name img{max-height:min(54px,9vh);}
+.chapter-number{max-width:100%;}
+.chapter-icon{width:min(54px,8vh);height:min(54px,8vh);font-size:34px;justify-self:center;}
+.chapter-icon.has-image{width:min(64px,9vh);height:auto;border:0;}
+.chapter-icon.has-image img{display:block;width:100%;height:auto;image-rendering:pixelated;}
+@media(max-width:560px){.chapter-topbar,.chapter-list{width:100%;}.chapter-row{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(48px,62px);padding:0 6px;}.chapter-number,.chapter-name img{max-height:min(42px,7vh);}.chapter-icon.has-image{width:min(48px,7vh);}}

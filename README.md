@@ -20,7 +20,15 @@ Example:
 
 ## Bundled games and missing chapters
 
-Undertale and Deltarune Chapter 1 are included in `games/`. Chapter 2–5 selector rows are present, but their game files are not in this repository yet. The `drsim-launcher-1.1.0` folder supplied for DR&UT Battles is a Tauri desktop launcher, not a browser game build, so it cannot run inside this page.
+Undertale and Deltarune Chapter 1 are included in `games/`. Chapter 2–5 selector rows are present, but their game files are not in this repository yet. DR&UT Battles has been removed from the game list for now.
+
+If you already have the `Toby-Web` sparse checkout at `C:\Users\purpl\Toby-Web`, run this from PowerShell:
+
+```powershell
+& 'C:\Users\purpl\OneDrive\Documents\New project\toby-game-library\download-missing-assets.ps1'
+```
+
+It adds only `files/chapter1/mus` and `files/undertale` to that checkout, then copies them into the matching `games/` folders here. It merges files without deleting existing ones.
 
 To fetch just selected folders from `Camzzz-vrgt/Toby-Web` without cloning all file contents, install Git and run this in PowerShell:
 
@@ -36,4 +44,4 @@ The four selected chapter folders total about 1.55 GB, so adding all of them to 
 
 ## Audio and font
 
-The supplied `audio_drone.ogg` loops on the home screen after the first interaction; `AUDIO_ANOTHERHIM.ogg` loops on the Deltarune chapter selector. Hover and selection sounds are included. The chapter row lettering is rendered into small PNG images from the supplied Undertale Deltarune Extended (Fixed) typeface because its license does not allow webfont embedding. Credit: [Viika's FontStruct typeface](https://fontstruct.com/fontstructions/show/2008226).
+The supplied `audio_drone.ogg` loops on the home screen after the first interaction; `AUDIO_ANOTHERHIM.ogg` loops on the Deltarune chapter selector. Hover and selection sounds are included. The chapter row lettering and UNDERTALE/DELTARUNE card names are raster images from the supplied Undertale Deltarune Extended (Fixed) typeface because its license does not allow webfont embedding. The selector uses the PNGs in `assets/Deltarune Icons/`. Credit: [Viika's FontStruct typeface](https://fontstruct.com/fontstructions/show/2008226).
