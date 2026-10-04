@@ -20,7 +20,7 @@ Example:
 
 ## Bundled games and missing chapters
 
-Undertale and Deltarune Chapter 1 are included in `games/`. Chapter 2–5 selector rows are present, but their game files are not in this repository yet. DR&UT Battles has been removed from the game list for now.
+Undertale and Deltarune Chapter 1 are bundled in `games/`. Chapters 2–5 run in the same full-screen player from jsDelivr URLs pointing at the corresponding `Toby-Web` folders. Their files total about 1.54 GB, so they are served from the CDN instead of being copied into this Pages site; GitHub Pages caps a published site at 1 GB. DR&UT Battles has been removed from the game list for now.
 
 If you already have the `Toby-Web` sparse checkout at `C:\Users\purpl\Toby-Web`, run this from PowerShell:
 
@@ -30,7 +30,7 @@ If you already have the `Toby-Web` sparse checkout at `C:\Users\purpl\Toby-Web`,
 
 It adds only `files/chapter1/mus` and `files/undertale` to that checkout, then copies them into the matching `games/` folders here. It merges files without deleting existing ones.
 
-To fetch just selected folders from `Camzzz-vrgt/Toby-Web` without cloning all file contents, install Git and run this in PowerShell:
+For offline/local copies, you can fetch just selected folders from `Camzzz-vrgt/Toby-Web` without cloning all file contents. Install Git and run this in PowerShell:
 
 ```powershell
 git clone --depth 1 --filter=blob:none --sparse https://github.com/Camzzz-vrgt/Toby-Web.git
@@ -38,7 +38,7 @@ cd Toby-Web
 git sparse-checkout set files/chapter2 files/chapter3 files/chapter4 files/chapter5
 ```
 
-Then copy each selected `files/chapterN` folder's contents into this project's `games/deltarune/chapterN/` folder, and change that chapter's `available` to `true` in `games.json` and `config.js`. To fetch only Undertale, use `git sparse-checkout set files/undertale` instead.
+The online selector already points Chapters 2–5 at the CDN, so these downloads are only needed if you want a local copy. Copy a selected `files/chapterN` folder into `games/deltarune/chapterN/` and change its catalog URL to that local `index.html` path. The missing-assets script separately fetches and copies Chapter 1 music and Undertale. To fetch only Undertale, use `git sparse-checkout set files/undertale` instead.
 
 The four selected chapter folders total about 1.55 GB, so adding all of them to this GitHub Pages site is not a practical deployment. Fetch only the chapter(s) you need. `git sparse-checkout set` replaces the selected folder list; include all desired paths in that one command.
 

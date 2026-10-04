@@ -13,7 +13,7 @@ const gamePlayer = document.querySelector('#game-player');
 const gameFrame = document.querySelector('#game-frame');
 const playerTitle = document.querySelector('#player-title');
 let playerReturn = 'library';
-let isMuted = false;
+let isMusicMuted = false;
 let lastMoveSound = 0;
 const catalogUrl = window.GAME_LIBRARY_CATALOG || 'games.json';
 const catalogBase = () => new URL(catalogUrl, location.href);
@@ -21,7 +21,7 @@ const assetUrl = value => new URL(value, catalogBase()).href;
 
 function sound(which) {
   const source = state.audio[which];
-  if (!source || isMuted) return;
+  if (!source) return;
   if (which === 'move') {
     const now = performance.now();
     if (now - lastMoveSound < 80) return;
@@ -34,18 +34,18 @@ function sound(which) {
 
 function syncMuteButtons() {
   for (const button of [musicToggle, homeMusicToggle]) {
-    button.classList.toggle('is-muted', isMuted);
-    button.setAttribute('aria-label', isMuted ? 'Unmute music' : 'Mute music');
-    button.title = isMuted ? 'Unmute music' : 'Mute music';
+    button.classList.toggle('is-muted', isMusicMuted);
+    button.setAttribute('aria-label', isMusicMuted ? 'Unmute music' : 'Mute music');
+    button.title = isMusicMuted ? 'Unmute music' : 'Mute music';
   }
-  homeMusic.muted = isMuted;
-  music.muted = isMuted;
+  homeMusic.muted = isMusicMuted;
+  music.muted = isMusicMuted;
 }
 
 function startHomeMusic() {
   if (!homeMusic.src) homeMusic.src = assetUrl(state.audio.home || 'games/deltarune/chapter1/mus/audio_drone.ogg');
   homeMusic.volume = 0.3;
-  if (!isMuted) homeMusic.play().catch(() => {});
+  if (!isMusicMuted) homeMusic.play().catch(() => {});
 }
 
 async function loadLibrary() {
@@ -127,7 +127,7 @@ function showDeltarune(game) {
   chapterScreen.hidden = false;
   music.src = assetUrl(state.audio.deltarune || 'assets/AUDIO_ANOTHERHIM.ogg');
   music.volume = 0.35;
-  music.muted = isMuted;
+  music.muted = isMusicMuted;
   music.play().catch(() => {});
   document.querySelector('#chapter-back').focus();
 }
@@ -216,7 +216,7 @@ for (const control of [musicToggle, homeMusicToggle, document.querySelector('#ch
 }
 for (const toggle of [musicToggle, homeMusicToggle]) {
   toggle.addEventListener('click', () => {
-    isMuted = !isMuted;
+    isMusicMuted = !isMusicMuted;
     syncMuteButtons();
     sound('select');
   });
